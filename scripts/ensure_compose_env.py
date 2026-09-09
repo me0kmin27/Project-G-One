@@ -14,6 +14,8 @@ DEFAULTS = {
     "G_ONE_JWT_ISSUER": "g-one",
     "G_ONE_JWT_AUDIENCE": "g-one-api",
     "G_ONE_HTTP_PORT": "8000",
+    "G_ONE_DB_NAME": "g_one",
+    "G_ONE_DB_USER": "g_one",
 }
 
 
@@ -34,6 +36,8 @@ def ensure_environment(path: Path) -> list[str]:
     keys = assigned_keys(existing)
     values = {
         "G_ONE_JWT_SECRET": secrets.token_urlsafe(48),
+        "G_ONE_DB_PASSWORD": secrets.token_urlsafe(32),
+        "G_ONE_DB_ROOT_PASSWORD": secrets.token_urlsafe(48),
         **DEFAULTS,
     }
     additions = [f"{key}={value}" for key, value in values.items() if key not in keys]
@@ -76,4 +80,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

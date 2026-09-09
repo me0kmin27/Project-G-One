@@ -12,7 +12,7 @@ class Base(DeclarativeBase):
 
 def configure_database(url: str):
     connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
-    engine = create_engine(url, connect_args=connect_args)
+    engine = create_engine(url, connect_args=connect_args, pool_pre_ping=True, pool_recycle=1800)
     return engine, sessionmaker(engine, expire_on_commit=False)
 
 
@@ -22,4 +22,3 @@ def get_session(request: Request) -> Generator[Session, None, None]:
 
 
 DatabaseSession = Annotated[Session, Depends(get_session)]
-
