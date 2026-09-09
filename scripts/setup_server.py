@@ -33,6 +33,8 @@ def main() -> None:
     run(["docker", "compose", "build", "web"], root)
     if not args.no_start:
         run([sys.executable, "scripts/manage_server.py", "start"], root)
+        run([sys.executable, "scripts/manage_server.py", "doctor"], root)
+        print("\nSetup complete. Open the HTTPS address configured in your reverse proxy.")
     else:
         print("Setup complete. Start later with: python3 scripts/manage_server.py start")
 
