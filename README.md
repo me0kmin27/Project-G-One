@@ -88,6 +88,11 @@ cd /path/to/Project-G-One && python3 scripts/setup_server.py
 cd /path/to/Project-G-One && python3 scripts/manage_server.py doctor
 ```
 
+배포 중 `address already in use`가 발생하면 권한 문제가 아니라 HTTP 포트 충돌입니다.
+`manage_server.py start`는 이제 시작 전에 포트 점유자를 확인하고 이전 G-One 웹 컨테이너만
+정리합니다. 관련 없는 서비스가 점유 중이면 해당 서비스를 자동 종료하지 않고 안전한 포트
+변경 명령을 안내합니다.
+
 설치부터 프록시 연결까지의 정확한 순서는 [리버스 프록시 배포 가이드](docs/REVERSE_PROXY.md)의
 **처음 설치: 순서대로 실행** 절을 따르십시오.
 

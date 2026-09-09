@@ -14,6 +14,7 @@ import urllib.request
 from configure_server import read_environment
 from docker_access import docker_prefix, ensure_project_writable, fail
 from ensure_compose_env import ensure_environment
+from host_port import ensure_host_port
 
 DOCKER = ["docker"]
 
@@ -95,6 +96,10 @@ def main() -> None:
     port = env.get("G_ONE_HTTP_PORT", "8000")
     bind = env.get("G_ONE_HTTP_BIND", "0.0.0.0")
     if args.command == "start":
+        try:
+            ensure_host_port(root, DOCKER, bind, int(port))
+        except RuntimeError as error:
+            fail(str(error))
         compose(root, "up", "-d", "--build", "--remove-orphans")
         raise SystemExit(0 if wait_until_ready(port) else 1)
     if args.command == "stop":
@@ -111,6 +116,10 @@ def main() -> None:
         compose(root, *arguments)
     elif args.command == "update":
         compose(root, "pull")
+        try:
+            ensure_host_port(root, DOCKER, bind, int(port))
+        except RuntimeError as error:
+            fail(str(error))
         compose(root, "up", "-d", "--build", "--remove-orphans")
         raise SystemExit(0 if wait_until_ready(port) else 1)
     elif args.command == "doctor":

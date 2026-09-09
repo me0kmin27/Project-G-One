@@ -93,6 +93,28 @@ curl -fsS http://G_ONE_SERVER_IP:8000/healthz && echo 'G-One upstream OK'
 이 명령이 실패하면 리버스 프록시 설정을 변경하기 전에 IP, TCP 8000 방화벽과
 `G_ONE_HTTP_BIND=0.0.0.0` 설정부터 수정해야 합니다.
 
+### `address already in use`가 표시되는 경우
+
+이 메시지는 권한 오류가 아니라 호스트의 HTTP 포트(기본 8000)를 다른 컨테이너 또는
+프로세스가 이미 사용한다는 뜻입니다. 배포 스크립트는 이제 기동 전에 포트를 검사하고,
+이전 배포에서 남은 `g-one-web` 컨테이너만 안전하게 제거한 뒤 새 컨테이너를 시작합니다.
+관련 없는 컨테이너나 호스트 프로세스가 포트를 점유한 경우에는 임의로 종료하지 않고
+점유 주체와 포트 변경 명령을 출력합니다.
+
+수동 재배포도 다음 한 줄이면 동일한 사전 점검을 거칩니다.
+
+```bash
+cd /path/to/Project-G-One && python3 scripts/manage_server.py start
+```
+
+다른 서비스가 의도적으로 8000 포트를 사용한다면 다음 한 줄로 G-One을 8001로 변경해
+재시작합니다. 이 경우 리버스 프록시 upstream도 반드시 `http://G_ONE_SERVER_IP:8001`로
+변경해야 합니다.
+
+```bash
+cd /path/to/Project-G-One && python3 scripts/configure_server.py set http-port 8001 && python3 scripts/manage_server.py start
+```
+
 ## 문제 판단
 
 기존 Compose 설정은 웹 컨테이너 포트를 `127.0.0.1:8000`에만 게시했습니다. 따라서
