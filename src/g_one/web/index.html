@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="G-One 통합 인프라 관리 콘솔">
+  <title>G-One · Overview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><span class="brand-mark">G</span><span>G-ONE</span></div>
+      <div class="workspace"><span class="workspace-icon">HN</span><div><small>WORKSPACE</small><strong>Hanul Networks</strong></div><span class="chevron">⌄</span></div>
+      <nav aria-label="주 메뉴">
+        <p class="nav-label">MENU</p>
+        <a class="nav-item active" href="#overview" data-page="overview"><span data-icon="grid"></span>Overview</a>
+        <a class="nav-item" href="#devices" data-page="devices"><span data-icon="monitor"></span>Devices <em>24</em></a>
+        <a class="nav-item" href="#network" data-page="network"><span data-icon="network"></span>Network</a>
+        <a class="nav-item" href="#files" data-page="files"><span data-icon="folder"></span>File Services</a>
+        <a class="nav-item" href="#support" data-page="support"><span data-icon="headset"></span>Remote Support <b>3</b></a>
+        <p class="nav-label second">MANAGEMENT</p>
+        <a class="nav-item" href="#people" data-page="people"><span data-icon="users"></span>People & Access</a>
+        <a class="nav-item" href="#integrations" data-page="integrations"><span data-icon="blocks"></span>Integrations</a>
+        <a class="nav-item" href="#audit" data-page="audit"><span data-icon="file"></span>Audit Log</a>
+        <a class="nav-item" href="#settings" data-page="settings"><span data-icon="settings"></span>Settings</a>
+      </nav>
+      <div class="sidebar-foot"><div class="system-status"><span class="pulse"></span><div><strong>All systems operational</strong><small>Last checked 1m ago</small></div></div><div class="profile"><span class="avatar">SK</span><div><strong>서지훈</strong><small>Organization Admin</small></div><button aria-label="프로필 메뉴">•••</button></div></div>
+    </aside>
+
+    <main>
+      <header class="topbar"><button class="menu-toggle" id="menuToggle" aria-label="메뉴 열기">☰</button><button class="search" id="searchButton"><span data-icon="search"></span><span>Search anything...</span><kbd>⌘ K</kbd></button><div class="header-actions"><button class="icon-button" aria-label="도움말">?</button><button class="icon-button notification" aria-label="알림"><span data-icon="bell"></span><i></i></button><span class="divider"></span><span class="today" id="today"></span></div></header>
+
+      <div class="content">
+        <section class="welcome"><div><p class="eyebrow">WEDNESDAY, SEPTEMBER 09</p><h1>Good morning, 지훈님 <span>👋</span></h1><p>조직의 인프라 상태와 오늘 필요한 작업을 확인하세요.</p></div><div class="welcome-actions"><button class="button secondary" id="exportButton"><span data-icon="download"></span>Export report</button><button class="button primary" id="supportButton"><span>＋</span>New support request</button></div></section>
+
+        <section class="metrics">
+          <article class="metric-card"><div class="metric-top"><span class="metric-icon blue" data-icon="monitor"></span><span class="trend up">↗ 8.4%</span></div><p>ACTIVE DEVICES</p><div><strong>24</strong><span>/ 28 enrolled</span></div><small><i class="dot green"></i>21 online right now</small></article>
+          <article class="metric-card"><div class="metric-top"><span class="metric-icon purple" data-icon="network"></span><span class="trend up">↗ 2.1%</span></div><p>VPN CONNECTIONS</p><div><strong>18</strong><span>active tunnels</span></div><small><i class="dot green"></i>Gateway healthy · 12ms</small></article>
+          <article class="metric-card"><div class="metric-top"><span class="metric-icon orange" data-icon="headset"></span><span class="badge-warn">3 pending</span></div><p>SUPPORT SESSIONS</p><div><strong>7</strong><span>this week</span></div><small><i class="dot amber"></i>1 session in progress</small></article>
+          <article class="metric-card"><div class="metric-top"><span class="metric-icon teal" data-icon="shield"></span><span class="trend">100%</span></div><p>SECURITY SCORE</p><div><strong>96</strong><span>/ 100</span></div><small><i class="dot green"></i>All policies enforced</small></article>
+        </section>
+
+        <section class="dashboard-grid">
+          <article class="panel activity-panel"><div class="panel-header"><div><h2>Network activity</h2><p>지난 7일간 VPN 트래픽</p></div><div class="legend"><span><i class="legend-dot inbound"></i>Inbound</span><span><i class="legend-dot outbound"></i>Outbound</span><button class="period">Last 7 days⌄</button></div></div><div class="chart-wrap"><div class="y-axis"><span>120 GB</span><span>90 GB</span><span>60 GB</span><span>30 GB</span><span>0 GB</span></div><div class="chart"><div class="grid-lines"><i></i><i></i><i></i><i></i><i></i></div><svg viewBox="0 0 700 220" preserveAspectRatio="none" aria-label="네트워크 활동 차트"><defs><linearGradient id="fillBlue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4779e8" stop-opacity=".22"/><stop offset="1" stop-color="#4779e8" stop-opacity="0"/></linearGradient></defs><path class="area" d="M0 178 C45 172 55 124 105 133 S155 174 205 144 S265 72 315 101 S370 167 420 139 S470 78 520 91 S590 125 630 79 S675 55 700 51 L700 220 L0 220Z"/><path class="line inbound-line" d="M0 178 C45 172 55 124 105 133 S155 174 205 144 S265 72 315 101 S370 167 420 139 S470 78 520 91 S590 125 630 79 S675 55 700 51"/><path class="line outbound-line" d="M0 197 C45 180 65 167 105 174 S155 193 205 172 S260 126 315 143 S375 190 420 170 S475 130 520 139 S575 165 630 127 S675 105 700 113"/></svg><div class="x-axis"><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span><span>Mon</span><span>Today</span></div></div></div></article>
+
+          <article class="panel health-panel"><div class="panel-header"><div><h2>System health</h2><p>핵심 서비스 실시간 상태</p></div><button class="more">•••</button></div><div class="health-list"><div class="health-row"><span class="service-icon wg">W</span><div><strong>WireGuard Gateway</strong><small>Seoul · Primary</small></div><span class="healthy">Healthy</span><b>12ms</b></div><div class="health-row"><span class="service-icon smb">S</span><div><strong>SMB File Server</strong><small>NAS-01 · 4.2 TB free</small></div><span class="healthy">Healthy</span><b>8ms</b></div><div class="health-row"><span class="service-icon auth">A</span><div><strong>Authentik SSO</strong><small>Identity provider</small></div><span class="healthy">Healthy</span><b>24ms</b></div><div class="health-row"><span class="service-icon px">P</span><div><strong>Proxmox Cluster</strong><small>3 nodes · 18 VMs</small></div><span class="degraded">Degraded</span><b>—</b></div></div><button class="view-all">View all integrations <span>→</span></button></article>
+
+          <article class="panel devices-panel"><div class="panel-header"><div><h2>Recent devices</h2><p>최근 활동한 조직 장치</p></div><button class="text-button">View all <span>→</span></button></div><div class="table-wrap"><table><thead><tr><th>DEVICE</th><th>OWNER</th><th>STATUS</th><th>IP ADDRESS</th><th>LAST SEEN</th><th></th></tr></thead><tbody><tr><td><span class="device-icon">▣</span><div><strong>JIHUN-DESKTOP</strong><small>Windows 11 Pro</small></div></td><td><span class="mini-avatar blue-av">SJ</span>서지훈</td><td><span class="status online">Online</span></td><td><code>10.8.0.12</code></td><td>Just now</td><td>•••</td></tr><tr><td><span class="device-icon">▣</span><div><strong>DESIGN-LAPTOP</strong><small>Windows 11 Pro</small></div></td><td><span class="mini-avatar pink-av">MY</span>김민영</td><td><span class="status online">Online</span></td><td><code>10.8.0.24</code></td><td>2 min ago</td><td>•••</td></tr><tr><td><span class="device-icon">▣</span><div><strong>FINANCE-PC-02</strong><small>Windows 10 Pro</small></div></td><td><span class="mini-avatar gold-av">HL</span>이현우</td><td><span class="status away">Away</span></td><td><code>10.8.0.31</code></td><td>18 min ago</td><td>•••</td></tr><tr><td><span class="device-icon">▣</span><div><strong>MEETING-ROOM-A</strong><small>Windows 11 IoT</small></div></td><td><span class="mini-avatar gray-av">—</span>Shared</td><td><span class="status offline">Offline</span></td><td><code>10.8.0.42</code></td><td>3 hrs ago</td><td>•••</td></tr></tbody></table></div></article>
+
+          <article class="panel quick-panel"><div class="panel-header"><div><h2>Quick actions</h2><p>자주 사용하는 관리 작업</p></div></div><div class="quick-grid"><button><span class="quick-icon blue" data-icon="plusUser"></span><div><strong>Invite member</strong><small>조직에 사용자 초대</small></div><i>→</i></button><button><span class="quick-icon purple" data-icon="monitor"></span><div><strong>Enroll device</strong><small>새 장치 등록하기</small></div><i>→</i></button><button id="quickSupport"><span class="quick-icon orange" data-icon="headset"></span><div><strong>Start support</strong><small>원격 지원 요청</small></div><i>→</i></button><button><span class="quick-icon teal" data-icon="file"></span><div><strong>Audit report</strong><small>감사 로그 내보내기</small></div><i>→</i></button></div></article>
+        </section>
+        <footer><span>G-One Control Plane <b>v0.1.0</b></span><span>Securely connected <i class="dot green"></i></span></footer>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="supportModal" aria-hidden="true"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><button class="modal-close" id="modalClose" aria-label="닫기">×</button><span class="modal-symbol" data-icon="headset"></span><h2 id="modalTitle">새 원격 지원 요청</h2><p>지원할 장치와 목적을 선택하세요. 장치 소유자의 명시적 동의 후 연결됩니다.</p><label>대상 장치<select><option>DESIGN-LAPTOP · 김민영</option><option>JIHUN-DESKTOP · 서지훈</option><option>FINANCE-PC-02 · 이현우</option></select></label><label>지원 목적<textarea placeholder="지원이 필요한 이유를 입력하세요"></textarea></label><div class="permissions"><span>요청 권한</span><label><input type="checkbox" checked> 화면 보기</label><label><input type="checkbox"> 입력 제어</label><label><input type="checkbox"> 파일 전송</label></div><button class="button primary full" id="sendRequest">동의 요청 보내기</button></div></div>
+  <div class="command" id="command"><div class="command-box"><div><span data-icon="search"></span><input id="commandInput" placeholder="페이지 또는 작업 검색..."><kbd>ESC</kbd></div><p>QUICK LINKS</p><button data-link="devices"><span data-icon="monitor"></span>장치 관리로 이동 <kbd>G D</kbd></button><button data-link="support"><span data-icon="headset"></span>새 원격 지원 요청 <kbd>G S</kbd></button><button data-link="audit"><span data-icon="file"></span>감사 로그 확인 <kbd>G A</kbd></button></div></div>
+  <div class="toast" id="toast"><span>✓</span><div><strong>지원 요청을 전송했습니다</strong><small>대상 사용자의 동의를 기다리고 있습니다.</small></div></div>
+  <script src="/assets/app.js"></script>
+</body>
+</html>

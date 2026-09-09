@@ -4,6 +4,13 @@ def test_health_and_authentication(client):
     assert client.get("/api/v1/devices").status_code == 401
 
 
+def test_admin_console_is_served(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "G-One · Overview" in response.text
+    assert client.get("/assets/styles.css").status_code == 200
+
+
 def test_devices_are_tenant_and_owner_scoped(client, auth):
     created = client.post(
         "/api/v1/devices", json={"name": "Office PC"}, headers=auth("alice", "tenant-a")
@@ -75,4 +82,3 @@ def test_support_request_cannot_cross_tenant(client, auth):
         headers=auth("helper", "tenant-b", ["support"]),
     )
     assert response.status_code == 404
-
