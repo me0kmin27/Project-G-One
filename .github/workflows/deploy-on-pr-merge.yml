@@ -60,7 +60,7 @@ jobs:
              python3 scripts/ensure_compose_env.py && \
              docker compose up -d database --wait --wait-timeout 120 && \
              python3 -m scripts.sync_database_credentials && \
-             (docker compose up -d --build --remove-orphans --wait --wait-timeout 180 || \
+             (python3 scripts/manage_server.py start || \
               { docker compose ps; docker compose logs --tail 200; exit 1; })"
 
       - name: Verify web application health

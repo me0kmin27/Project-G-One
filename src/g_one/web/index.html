@@ -9,46 +9,65 @@
 </head>
 <body>
   <div id="loginView" class="login-view">
+    <div class="login-ambient" aria-hidden="true"><span></span><span></span><span></span></div>
+    <section class="login-story" aria-label="G-One 소개">
+      <div class="brand brand-light"><span class="logo small">G</span><strong>G-ONE</strong></div>
+      <p class="eyebrow">PRIVATE INFRASTRUCTURE, SIMPLIFIED</p>
+      <h2>하나의 안전한 연결.<br>흔들림 없는 제어.</h2>
+      <p>장치, 사설망, 파일 서비스와 원격 지원을<br>가장 신뢰할 수 있는 방식으로 운영하세요.</p>
+      <div class="trust-list">
+        <span><i>✓</i> 최소 권한 기반 접근 제어</span>
+        <span><i>✓</i> 사용자 동의 기반 원격 지원</span>
+        <span><i>✓</i> 모든 보안 작업 감사 추적</span>
+      </div>
+      <small>SECURED BY G-ONE CONTROL PLANE</small>
+    </section>
     <section class="login-card" aria-labelledby="loginTitle">
-      <div class="logo">G</div><p class="kicker">G-ONE CONTROL PLANE</p>
-      <h1 id="loginTitle">안전한 인프라 관리의 시작</h1>
-      <p class="muted">콘솔 암호로 워크스페이스에 연결합니다. 반드시 HTTPS 리버스 프록시를 통해 접속하세요.</p>
+      <div class="mobile-brand"><div class="logo">G</div><strong>G-ONE</strong></div>
+      <p class="kicker">WELCOME BACK</p>
+      <h1 id="loginTitle">관리 콘솔에 로그인</h1>
+      <p class="muted">워크스페이스 정보를 입력해 안전하게 연결하세요.</p>
       <form id="loginForm">
-        <label>사용자 ID<input id="subject" value="admin" required maxlength="128" autocomplete="username"></label>
-        <label>워크스페이스<input id="tenant" value="demo" required maxlength="128"></label>
-        <label>콘솔 암호<input id="consolePassword" type="password" required maxlength="512" autocomplete="current-password"></label>
-        <button class="btn primary" type="submit">관리 콘솔 시작</button>
+        <label>사용자 ID<span class="input-wrap"><i aria-hidden="true">@</i><input id="subject" value="admin" required maxlength="128" autocomplete="username"></span></label>
+        <label>워크스페이스<span class="input-wrap"><i aria-hidden="true">◇</i><input id="tenant" value="demo" required maxlength="128"></span></label>
+        <label>콘솔 암호<span class="input-wrap"><i aria-hidden="true">●</i><input id="consolePassword" type="password" required maxlength="512" autocomplete="current-password"><button id="passwordToggle" class="password-toggle" type="button" aria-label="암호 표시">보기</button></span></label>
+        <button class="btn primary login-submit" type="submit"><span>관리 콘솔 시작</span><b>→</b></button>
       </form>
       <button id="tokenToggle" class="link-btn" type="button">발급된 토큰으로 연결</button>
       <form id="tokenForm" class="hidden"><label>Bearer 액세스 토큰<textarea id="accessToken" rows="4" required></textarea></label><button class="btn secondary" type="submit">토큰 연결</button></form>
       <p id="loginError" class="error" role="alert"></p>
+      <p class="secure-note"><span>⌾</span> TLS로 보호되는 안전한 연결입니다</p>
     </section>
   </div>
 
   <div id="appView" class="app hidden">
-    <aside id="sidebar">
+    <aside id="sidebar" aria-label="주 메뉴">
       <div class="brand"><span class="logo small">G</span><strong>G-ONE</strong></div>
       <div class="workspace"><span>WORKSPACE</span><strong id="workspaceName">—</strong></div>
       <nav>
-        <button class="nav active" data-page="overview">▦ <span>개요</span></button>
-        <button class="nav" data-page="devices">▣ <span>장치</span><b id="deviceBadge">0</b></button>
-        <button class="nav" data-page="support">◎ <span>원격 지원</span><b id="supportBadge">0</b></button>
-        <button class="nav" data-page="audit">≡ <span>감사 로그</span></button>
+        <small>MANAGEMENT</small>
+        <button class="nav active" data-page="overview"><i>⌂</i><span>개요</span></button>
+        <button class="nav" data-page="devices"><i>▣</i><span>장치</span><b id="deviceBadge">0</b></button>
+        <button class="nav" data-page="support"><i>◎</i><span>원격 지원</span><b id="supportBadge">0</b></button>
+        <small class="nav-section">SECURITY</small>
+        <button class="nav" data-page="audit"><i>≡</i><span>감사 로그</span></button>
       </nav>
+      <div class="security-card"><span>◈</span><div><strong>보안 상태 양호</strong><small>모든 시스템이 보호되고 있습니다.</small></div></div>
       <div class="account"><span id="avatar">A</span><div><strong id="accountName">—</strong><small id="accountRole">—</small></div><button id="logout" title="로그아웃">↪</button></div>
     </aside>
     <main>
-      <header><button id="menuButton" class="icon-btn" aria-label="메뉴 열기">☰</button><div><p>CONTROL CENTER</p><h1 id="pageTitle">개요</h1></div><div class="connection"><i></i> API 연결됨</div></header>
+      <header><button id="menuButton" class="icon-btn" aria-label="메뉴 열기">☰</button><div><p>CONTROL CENTER</p><h1 id="pageTitle">개요</h1></div><div class="header-meta"><span id="currentDate"></span><span class="divider"></span><div class="connection"><i></i> API 연결됨</div></div></header>
+      <button id="sidebarBackdrop" class="sidebar-backdrop" aria-label="메뉴 닫기"></button>
       <div class="content">
         <div id="globalError" class="alert hidden" role="alert"></div>
         <section class="page" data-view="overview">
-          <div class="hero"><div><p class="kicker">SECURE · PRIVATE · AUDITABLE</p><h2><span id="greetingName">관리자</span>님, 시스템 현황입니다.</h2><p class="muted">등록 장치와 동의 기반 원격 지원 요청을 한 곳에서 관리하세요.</p></div><button class="btn primary" data-action="open-support">+ 지원 요청</button></div>
-          <div class="metrics"><article><span>등록 장치</span><strong id="deviceCount">0</strong><small>현재 워크스페이스</small></article><article><span>활성 장치</span><strong id="activeCount">0</strong><small class="good">● 정상 등록</small></article><article><span>대기 요청</span><strong id="pendingCount">0</strong><small class="warn">● 사용자 동의 필요</small></article><article><span>API 상태</span><strong>정상</strong><small class="good">● 실시간 연결</small></article></div>
+          <div class="hero"><div><p class="kicker">SECURE · PRIVATE · AUDITABLE</p><h2><span id="greetingName">관리자</span>님, 좋은 하루입니다.</h2><p class="muted">오늘도 G-One이 안전하게 인프라를 지키고 있습니다.</p><div class="hero-sync"><span>✓</span> 마지막 동기화 <b id="lastSync">방금 전</b></div></div><div class="hero-visual" aria-hidden="true"><i></i><i></i><i></i><strong>G</strong></div><button class="btn hero-action" data-action="open-support"><span>＋</span> 지원 요청</button></div>
+          <div class="metrics"><article><div class="metric-top"><span>등록 장치</span><i class="metric-icon blue">▣</i></div><strong id="deviceCount">0</strong><small>현재 워크스페이스 전체</small></article><article><div class="metric-top"><span>활성 장치</span><i class="metric-icon green">⌁</i></div><strong id="activeCount">0</strong><small class="good"><i></i> 모든 장치 정상</small></article><article><div class="metric-top"><span>대기 요청</span><i class="metric-icon orange">◎</i></div><strong id="pendingCount">0</strong><small class="warn"><i></i> 사용자 동의 필요</small></article><article><div class="metric-top"><span>시스템 상태</span><i class="metric-icon purple">◈</i></div><strong class="system-normal">정상</strong><small class="good"><i></i> 모든 서비스 운영 중</small></article></div>
           <div class="grid"><section class="panel"><div class="panel-head"><div><h3>최근 장치</h3><p>워크스페이스에 등록된 장치</p></div><button class="link-btn" data-go="devices">전체 보기 →</button></div><div id="recentDevices"></div></section><section class="panel"><div class="panel-head"><div><h3>지원 요청</h3><p>최근 원격 지원 상태</p></div><button class="link-btn" data-go="support">전체 보기 →</button></div><div id="recentSupport"></div></section></div>
         </section>
-        <section class="page hidden" data-view="devices"><div class="section-head"><div><h2>장치 관리</h2><p>장치를 등록하거나 접근을 회수합니다.</p></div><button id="addDevice" class="btn primary">+ 장치 등록</button></div><section class="panel table-panel"><div id="devicesTable"></div></section></section>
+        <section class="page hidden" data-view="devices"><div class="section-head"><div><h2>장치 관리</h2><p>워크스페이스 장치를 등록하고 접근 상태를 관리합니다.</p></div><button id="addDevice" class="btn primary">＋ 장치 등록</button></div><section class="panel table-panel"><div class="table-toolbar"><div><h3>전체 장치</h3><span id="deviceTotal">0대</span></div><label class="search"><span>⌕</span><input id="deviceSearch" type="search" placeholder="장치 또는 소유자 검색" aria-label="장치 검색"></label></div><div id="devicesTable"></div></section></section>
         <section class="page hidden" data-view="support"><div class="section-head"><div><h2>원격 지원</h2><p>명시적 동의가 필요한 지원 요청을 확인합니다.</p></div><button class="btn primary" data-action="open-support">+ 지원 요청</button></div><section class="panel table-panel"><div id="supportTable"></div></section></section>
-        <section class="page hidden" data-view="audit"><div class="section-head"><div><h2>감사 로그</h2><p>보안 관련 작업 이력을 확인합니다.</p></div><button id="refreshAudit" class="btn secondary">새로고침</button></div><section class="panel table-panel"><div id="auditTable"></div></section></section>
+        <section class="page hidden" data-view="audit"><div class="section-head"><div><h2>감사 로그</h2><p>워크스페이스의 보안 관련 작업 이력을 확인합니다.</p></div><button id="refreshAudit" class="btn secondary">↻ 새로고침</button></div><section class="panel table-panel"><div id="auditTable"></div></section></section>
       </div>
     </main>
   </div>
