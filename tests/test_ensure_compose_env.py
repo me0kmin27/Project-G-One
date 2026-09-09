@@ -10,8 +10,13 @@ def test_creates_complete_private_environment(tmp_path):
     additions = ensure_environment(path)
     contents = path.read_text()
 
-    assert len(additions) == 5
-    assert assigned_keys(contents) == {"G_ONE_JWT_SECRET", *DEFAULTS}
+    assert len(additions) == 8
+    assert assigned_keys(contents) == {
+        "G_ONE_JWT_SECRET",
+        "G_ONE_DB_PASSWORD",
+        "G_ONE_DB_ROOT_PASSWORD",
+        *DEFAULTS,
+    }
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     secret = next(line.split("=", 1)[1] for line in contents.splitlines() if line.startswith("G_ONE_JWT_SECRET="))
     assert len(secret) >= 32
@@ -25,9 +30,21 @@ def test_preserves_existing_values_and_is_idempotent(tmp_path):
     first_contents = path.read_text()
     second_additions = ensure_environment(path)
 
-    assert len(first_additions) == 3
+    assert len(first_additions) == 6
     assert second_additions == []
     assert path.read_text() == first_contents
-    assert "G_ONE_BIND_ADDRESS=0.0.0.0" in first_contents
     assert "G_ONE_HTTP_PORT=9000" in first_contents
     assert "operator-owned-secret-with-32-bytes" in first_contents
+
+
+def test_configuration_updates_one_value_without_exposing_or_losing_others(tmp_path):
+    path = tmp_path / ".env"
+    path.write_text("G_ONE_JWT_SECRET=secret\nG_ONE_HTTP_PORT=8000\n")
+
+    write_setting(path, "G_ONE_HTTP_PORT", "9000")
+
+    assert read_environment(path) == {
+        "G_ONE_JWT_SECRET": "secret",
+        "G_ONE_HTTP_PORT": "9000",
+    }
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
