@@ -50,13 +50,13 @@ jobs:
             ./ \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/"
 
-      - name: Rebuild and restart web application
+      - name: Rebuild, restart, and wait for web application
         run: |
           ssh \
             -i ~/.ssh/deploy_key \
             -p "${{ secrets.DEPLOY_PORT }}" \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "cd '${{ secrets.DEPLOY_PATH }}' && python3 scripts/ensure_compose_env.py && docker compose up -d --build --remove-orphans"
+            "cd '${{ secrets.DEPLOY_PATH }}' && python3 scripts/ensure_compose_env.py && python3 scripts/manage_server.py start"
 
       - name: Verify web application health
         run: |
