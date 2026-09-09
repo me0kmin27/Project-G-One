@@ -1,11 +1,59 @@
-const icons={grid:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',monitor:'<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/>',network:'<circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="18" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="m10.7 7.2-4.4 8.5m7-8.5 4.4 8.5M7.5 18h9"/>',folder:'<path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h4l2 2H19a2 2 0 0 1 2 2v9.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5Z"/>',headset:'<path d="M4 14v-2a8 8 0 0 1 16 0v2M6 19H5a2 2 0 0 1-2-2v-2a2 2 0 0 1 2-2h2v6a2 2 0 0 0 2 2h3m5-8h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2h-2z"/>',users:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm13 10v-2a4 4 0 0 0-3-3.87m-2-11.96a4 4 0 0 1 0 7.75"/>',blocks:'<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><path d="M17.5 14v7M14 17.5h7"/>',file:'<path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 13h7m-7 4h7"/>',settings:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.83 2.83-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21h-4v-.09A1.7 1.7 0 0 0 9 19.36a1.7 1.7 0 0 0-1.88.34l-.06.06-2.83-2.83.06-.06A1.7 1.7 0 0 0 4.63 15 1.7 1.7 0 0 0 3.07 14H3v-4h.09A1.7 1.7 0 0 0 4.64 9a1.7 1.7 0 0 0-.34-1.88l-.06-.06 2.83-2.83.06.06A1.7 1.7 0 0 0 9 4.63h.01A1.7 1.7 0 0 0 10 3.07V3h4v.09A1.7 1.7 0 0 0 15 4.64a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.83 2.83-.06.06A1.7 1.7 0 0 0 19.37 9v.01A1.7 1.7 0 0 0 20.93 10H21v4h-.09A1.7 1.7 0 0 0 19.4 15Z"/>',search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>',bell:'<path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/>',download:'<path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/>',shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/>',plusUser:'<path d="M15 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M8 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm11-3v6m-3-3h6"/>'};
-document.querySelectorAll('[data-icon]').forEach(el=>{el.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[el.dataset.icon]}</svg>`});
-const modal=document.getElementById('supportModal'),command=document.getElementById('command');
-const openModal=()=>{modal.classList.add('open');modal.setAttribute('aria-hidden','false')};
-const closeModal=()=>{modal.classList.remove('open');modal.setAttribute('aria-hidden','true')};
-document.getElementById('supportButton').onclick=openModal;document.getElementById('quickSupport').onclick=openModal;document.getElementById('modalClose').onclick=closeModal;modal.addEventListener('click',e=>{if(e.target===modal)closeModal()});
-document.getElementById('sendRequest').onclick=()=>{closeModal();const t=document.getElementById('toast');t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3500)};
-const openCommand=()=>{command.classList.add('open');setTimeout(()=>document.getElementById('commandInput').focus(),20)};const closeCommand=()=>command.classList.remove('open');document.getElementById('searchButton').onclick=openCommand;command.addEventListener('click',e=>{if(e.target===command)closeCommand()});document.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();openCommand()}if(e.key==='Escape'){closeCommand();closeModal()}});
-document.querySelectorAll('.nav-item').forEach(item=>item.onclick=()=>{document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));item.classList.add('active');document.getElementById('sidebar').classList.remove('open')});document.querySelectorAll('.command button').forEach(b=>b.onclick=()=>{closeCommand();if(b.dataset.link==='support')openModal();else document.querySelector(`[data-page="${b.dataset.link}"]`)?.click()});
-document.getElementById('menuToggle').onclick=()=>document.getElementById('sidebar').classList.toggle('open');document.getElementById('exportButton').onclick=()=>{const t=document.getElementById('toast');t.querySelector('strong').textContent='리포트를 준비했습니다';t.querySelector('small').textContent='CSV 파일 다운로드가 곧 시작됩니다.';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000)};
-document.getElementById('today').textContent=new Intl.DateTimeFormat('ko-KR',{year:'numeric',month:'long',day:'numeric'}).format(new Date());
+const $=(selector,root=document)=>root.querySelector(selector);
+const $$=(selector,root=document)=>[...root.querySelectorAll(selector)];
+const state={token:sessionStorage.getItem('g-one-token')||'',me:null,devices:[],support:[],audit:[]};
+const labels={overview:'개요',devices:'장치',support:'원격 지원',audit:'감사 로그'};
+
+async function api(path,options={}){
+  const headers={'Content-Type':'application/json',...(options.headers||{})};
+  if(state.token) headers.Authorization=`Bearer ${state.token}`;
+  const response=await fetch(path,{...options,headers});
+  if(response.status===204)return null;
+  const data=await response.json().catch(()=>({detail:'서버 응답을 읽을 수 없습니다.'}));
+  if(!response.ok)throw new Error(typeof data.detail==='string'?data.detail:'요청을 처리하지 못했습니다.');
+  return data;
+}
+function escapeHtml(value){return String(value).replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));}
+function date(value){return new Intl.DateTimeFormat('ko-KR',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value));}
+function statusLabel(value){return {registered:'등록됨',revoked:'회수됨',pending:'대기 중',accepted:'진행 중',denied:'거절됨',ended:'종료됨',expired:'만료됨'}[value]||value;}
+function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2800);}
+function showError(error){const el=$('#globalError');el.textContent=error.message;el.classList.remove('hidden');}
+function empty(message){return `<div class="empty">${escapeHtml(message)}</div>`;}
+function deviceRows(items){return items.length?items.map(d=>`<div class="list-row"><span class="item-icon">▣</span><div><strong>${escapeHtml(d.name)}</strong><small>${escapeHtml(d.owner_id)} · ${date(d.created_at)}</small></div><span class="status ${d.status}">${statusLabel(d.status)}</span></div>`).join(''):empty('등록된 장치가 없습니다.');}
+function supportRows(items){return items.length?items.map(r=>`<div class="list-row"><span class="item-icon">◎</span><div><strong>${escapeHtml(r.purpose)}</strong><small>${escapeHtml(deviceName(r.target_device_id))} · ${date(r.created_at)}</small></div><span class="status ${r.state}">${statusLabel(r.state)}</span></div>`).join(''):empty('지원 요청이 없습니다.');}
+function deviceName(id){return state.devices.find(d=>d.id===id)?.name||id.slice(0,8);}
+
+async function loadData(){
+  $('#globalError').classList.add('hidden');
+  try{
+    const [devices,support]=await Promise.all([api('/api/v1/devices'),api('/api/v1/support-requests')]);
+    state.devices=devices;state.support=support;render();
+  }catch(error){showError(error);}
+}
+function render(){
+  const active=state.devices.filter(d=>d.status==='registered');
+  $('#deviceCount').textContent=state.devices.length;$('#activeCount').textContent=active.length;
+  $('#pendingCount').textContent=state.support.filter(r=>r.state==='pending').length;
+  $('#deviceBadge').textContent=state.devices.length;$('#supportBadge').textContent=state.support.filter(r=>r.state==='pending').length;
+  $('#recentDevices').innerHTML=deviceRows(state.devices.slice(0,4));$('#recentSupport').innerHTML=supportRows(state.support.slice(0,4));
+  $('#supportDevice').innerHTML=active.map(d=>`<option value="${d.id}">${escapeHtml(d.name)} · ${escapeHtml(d.owner_id)}</option>`).join('');
+  $('#devicesTable').innerHTML=state.devices.length?`<table class="data-table"><thead><tr><th>장치</th><th>소유자</th><th>플랫폼</th><th>상태</th><th>등록일</th><th></th></tr></thead><tbody>${state.devices.map(d=>`<tr><td><strong>${escapeHtml(d.name)}</strong></td><td>${escapeHtml(d.owner_id)}</td><td>${escapeHtml(d.platform)}</td><td><span class="status ${d.status}">${statusLabel(d.status)}</span></td><td>${date(d.created_at)}</td><td>${d.status==='registered'?`<button class="danger-btn" data-revoke="${d.id}">접근 회수</button>`:''}</td></tr>`).join('')}</tbody></table>`:empty('첫 장치를 등록해 보세요.');
+  $('#supportTable').innerHTML=state.support.length?`<table class="data-table"><thead><tr><th>목적</th><th>장치</th><th>요청자</th><th>권한</th><th>상태</th><th>요청일</th></tr></thead><tbody>${state.support.map(r=>`<tr><td><strong>${escapeHtml(r.purpose)}</strong></td><td>${escapeHtml(deviceName(r.target_device_id))}</td><td>${escapeHtml(r.requester_id)}</td><td>${r.permissions.map(escapeHtml).join(', ')}</td><td><span class="status ${r.state}">${statusLabel(r.state)}</span></td><td>${date(r.created_at)}</td></tr>`).join('')}</tbody></table>`:empty('지원 요청이 없습니다.');
+}
+async function connect(){
+  try{
+    state.me=await api('/api/v1/me');sessionStorage.setItem('g-one-token',state.token);
+    $('#workspaceName').textContent=state.me.tenant_id;$('#accountName').textContent=state.me.subject;$('#greetingName').textContent=state.me.subject;$('#avatar').textContent=state.me.subject[0].toUpperCase();$('#accountRole').textContent=state.me.roles.join(' · ');
+    $('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');await loadData();
+  }catch(error){state.token='';sessionStorage.removeItem('g-one-token');$('#loginError').textContent=`연결 실패: ${error.message}`;$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');}
+}
+function go(page){$$('.page').forEach(el=>el.classList.toggle('hidden',el.dataset.view!==page));$$('.nav').forEach(el=>el.classList.toggle('active',el.dataset.page===page));$('#pageTitle').textContent=labels[page];$('#sidebar').classList.remove('open');if(page==='audit')loadAudit();}
+async function loadAudit(){try{state.audit=await api('/api/v1/audit-events');$('#auditTable').innerHTML=state.audit.length?`<table class="data-table"><thead><tr><th>작업</th><th>행위자</th><th>대상</th><th>결과</th><th>시각</th></tr></thead><tbody>${state.audit.map(e=>`<tr><td><strong>${escapeHtml(e.action)}</strong></td><td>${escapeHtml(e.actor_id)}</td><td>${escapeHtml(e.target_type)} · ${escapeHtml(e.target_id.slice(0,8))}</td><td>${escapeHtml(e.outcome)}</td><td>${date(e.occurred_at)}</td></tr>`).join('')}</tbody></table>`:empty('감사 이벤트가 없습니다.');}catch(error){$('#auditTable').innerHTML=empty(`조회할 수 없습니다: ${error.message}`);}}
+
+$('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';try{const result=await api('/api/v1/session/development',{method:'POST',body:JSON.stringify({subject:$('#subject').value,tenant_id:$('#tenant').value,roles:['tenant_admin','support','auditor']})});state.token=result.access_token;await connect();}catch(error){$('#loginError').textContent=`로그인 실패: ${error.message}`;}});
+$('#tokenToggle').onclick=()=>$('#tokenForm').classList.toggle('hidden');$('#tokenForm').addEventListener('submit',async e=>{e.preventDefault();state.token=$('#accessToken').value.trim();await connect();});
+$('#logout').onclick=()=>{sessionStorage.removeItem('g-one-token');location.reload();};$('#menuButton').onclick=()=>$('#sidebar').classList.toggle('open');$$('.nav').forEach(el=>el.onclick=()=>go(el.dataset.page));$$('[data-go]').forEach(el=>el.onclick=()=>go(el.dataset.go));
+$('#addDevice').onclick=()=>$('#deviceDialog').showModal();$$('[data-action="open-support"]').forEach(el=>el.onclick=()=>{if(!state.devices.some(d=>d.status==='registered'))return toast('먼저 활성 장치를 등록하세요.');$('#supportDialog').showModal();});$$('[data-close]').forEach(el=>el.onclick=()=>el.closest('dialog').close());
+$('#deviceForm').addEventListener('submit',async e=>{e.preventDefault();try{await api('/api/v1/devices',{method:'POST',body:JSON.stringify({name:$('#deviceName').value})});e.target.reset();$('#deviceDialog').close();toast('장치를 등록했습니다.');await loadData();}catch(error){showError(error);}});
+$('#supportForm').addEventListener('submit',async e=>{e.preventDefault();const permissions=$$('input[name="permission"]:checked').map(el=>el.value);if(!permissions.length)return toast('권한을 하나 이상 선택하세요.');try{await api('/api/v1/support-requests',{method:'POST',body:JSON.stringify({target_device_id:$('#supportDevice').value,purpose:$('#supportPurpose').value,permissions})});e.target.reset();$('#supportDialog').close();toast('지원 요청을 보냈습니다.');await loadData();}catch(error){showError(error);}});
+$('#devicesTable').addEventListener('click',async e=>{const id=e.target.dataset.revoke;if(!id||!confirm('이 장치의 접근을 회수할까요?'))return;try{await api(`/api/v1/devices/${id}`,{method:'DELETE'});toast('장치 접근을 회수했습니다.');await loadData();}catch(error){showError(error);}});$('#refreshAudit').onclick=loadAudit;
+if(state.token)connect();

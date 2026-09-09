@@ -8,6 +8,30 @@ class ApiModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class PrincipalRead(ApiModel):
+    subject: str
+    tenant_id: str
+    roles: list[str]
+
+
+class DevelopmentSessionCreate(ApiModel):
+    subject: str = Field(min_length=1, max_length=128)
+    tenant_id: str = Field(min_length=1, max_length=128)
+    roles: set[str] = Field(default_factory=lambda: {"tenant_admin", "support", "auditor"})
+
+    @field_validator("subject", "tenant_id")
+    @classmethod
+    def normalize_identifier(cls, value: str) -> str:
+        if not (normalized := value.strip()):
+            raise ValueError("identifier cannot be blank")
+        return normalized
+
+
+class SessionToken(ApiModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
 class DeviceCreate(ApiModel):
     name: str = Field(min_length=1, max_length=128)
 
@@ -76,4 +100,3 @@ class AuditEventRead(ApiModel):
     outcome: str
     details: dict
     occurred_at: datetime
-
