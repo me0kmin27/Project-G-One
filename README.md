@@ -10,7 +10,7 @@ Python 웹 관리 환경에서 운영하기 위한 중앙관리형 플랫폼입�
 
 ## 현재 상태
 
-- 단계: **Windows 제품 요구사항 기준선 및 위험 검증**
+- 단계: **제어면 백엔드 기반 구축**
 - 확정된 내용: Windows 전용 클라이언트, 매 실행 대화형 로그인, 자동 VPN·SMB 구성,
   WireGuard 중계, 파일별 권한, 티켓·동의 기반 원격 지원, 자체 호스팅과 멀티테넌시
 - 통합 후보: Authentik, Synology, Proxmox, Vaultwarden
@@ -27,14 +27,25 @@ SMB를 1차 대상으로 삼지만 NFS, WebDAV 및 다른 프로토콜의 추가
 4. 접속 장치에서 동의를 받은 뒤 최소 권한 원격 지원 세션을 연결합니다.
 5. 외부 서버 통합을 격리된 어댑터로 확장하고 모든 고위험 작업을 감사합니다.
 
-## 시작하기
+## 백엔드 시작하기
 
-현재 저장소에는 실행 가능한 애플리케이션이 없으며 아키텍처·보안 검증부터 진행합니다.
+Python 3.12 이상에서 제어면 API를 실행할 수 있습니다. 현재 인증기는 OIDC 연결 전 개발
+단계의 HS256 액세스 토큰 검증기이며, 개발 외 환경에서는 반드시 32바이트 이상의 별도
+서명을 설정해야 합니다.
 
-1. [프로젝트 방향 문서](docs/PROJECT_DIRECTION.md)의 열린 질문에 답합니다.
-2. 배포 토폴로지와 데이터 흐름을 바탕으로 위협 모델을 작성합니다.
-3. Authentik OIDC, WireGuard 정책 적용, SMB 권한과 원격 지원 동의를 기술 검증합니다.
-4. ADR로 기술 스택을 확정한 뒤 설치·실행·복구 방법을 추가합니다.
+```bash
+python -m venv .venv
+. .venv/bin/activate
+pip install -e '.[dev]'
+export G_ONE_JWT_SECRET='replace-with-at-least-32-random-bytes'
+uvicorn g_one.main:app --reload
+```
+
+API 문서는 `http://127.0.0.1:8000/docs`, 상태 확인은 `/healthz`와 `/readyz`에서 제공됩니다.
+기본 SQLite 파일은 `g-one.db`이며 `G_ONE_DATABASE_URL`로 변경할 수 있습니다. 현재 구현은
+장치 등록·폐기, tenant 범위 조회, 원격 지원 요청·동의·종료 및 감사 조회의 첫 수직
+슬라이스입니다. 실제 배포 전에는 Authentik OIDC/JWKS 검증과 PostgreSQL 마이그레이션을
+완료해야 합니다.
 
 ## 문서 구조
 
@@ -44,6 +55,9 @@ SMB를 1차 대상으로 삼지만 NFS, WebDAV 및 다른 프로토콜의 추가
 ├── docs/
 │   ├── PROJECT_DIRECTION.md                    # 제품 요구사항, 아키텍처, 보안, MVP와 의사결정 기록
 │   └── WINDOWS_CLIENT_AND_SERVICE_REQUIREMENTS.md # Windows 앱·서비스 상세 요구사항
+├── src/g_one/                 # FastAPI 제어면 서버
+├── tests/                     # tenant 격리와 동의 흐름 API 테스트
+├── pyproject.toml             # Python 패키지 및 개발 의존성
 └── LICENSE                    # GNU GPL v3 라이선스 전문
 ```
 
