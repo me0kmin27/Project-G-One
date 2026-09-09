@@ -45,18 +45,17 @@ API 문서는 `http://127.0.0.1:8000/docs`, 상태 확인은 `/healthz`와 `/rea
 관리 콘솔은 `http://127.0.0.1:8000/`에서 바로 확인할 수 있습니다.
 기본 SQLite 파일은 `g-one.db`이며 `G_ONE_DATABASE_URL`로 변경할 수 있습니다. 현재 구현은
 장치 등록·폐기, tenant 범위 조회, 원격 지원 요청·동의·종료 및 감사 조회의 첫 수직
-슬라이스입니다. 실제 배포 전에는 Authentik OIDC/JWKS 검증과 PostgreSQL 마이그레이션을
-완료해야 합니다.
+슬라이스입니다. 실제 배포 전에는 Authentik OIDC/JWKS 검증과 MariaDB 스키마 마이그레이션
+체계를 완료해야 합니다.
 
-### Docker Compose 배포
+### Docker Compose + MariaDB 배포
 
-배포 서버의 저장소 경로에서 다음 명령을 실행하면 누락된 `.env` 값을 안전한 권한으로
-생성하고 웹 컨테이너를 시작합니다. 기존 운영자 설정과 JWT 비밀은 덮어쓰지 않습니다.
+운영 환경은 MariaDB 11.4를 사용합니다. 최초 설치 스크립트는 JWT 및 DB 암호를 자동으로
+생성하고, Compose 설정 검증, 이미지 준비, 웹 이미지 빌드와 서비스 시작까지 수행합니다.
+스크립트를 다시 실행해도 기존 운영자 설정과 비밀은 덮어쓰지 않습니다.
 
 ```bash
-python3 scripts/ensure_compose_env.py
-docker compose up -d --build --remove-orphans
-docker compose exec -T web python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=10).read()"
+python3 scripts/setup_server.py
 ```
 
 기본적으로 관리 콘솔은 호스트의 모든 인터페이스에서 `8000` 포트로 공개되므로

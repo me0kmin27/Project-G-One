@@ -1,11 +1,30 @@
 services:
+  database:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${G_ONE_DB_NAME:-g_one}
+      MARIADB_USER: ${G_ONE_DB_USER:-g_one}
+      MARIADB_PASSWORD: ${G_ONE_DB_PASSWORD:?run python3 scripts/setup_server.py first}
+      MARIADB_ROOT_PASSWORD: ${G_ONE_DB_ROOT_PASSWORD:?run python3 scripts/setup_server.py first}
+    volumes:
+      - g-one-database:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - backend
+
   web:
     build:
       context: .
     restart: unless-stopped
     environment:
       G_ONE_ENVIRONMENT: production
-      G_ONE_DATABASE_URL: sqlite:////var/lib/g-one/g-one.db
+      G_ONE_DATABASE_URL: mysql+pymysql://${G_ONE_DB_USER:-g_one}:${G_ONE_DB_PASSWORD}@database:3306/${G_ONE_DB_NAME:-g_one}?charset=utf8mb4
       G_ONE_JWT_SECRET: ${G_ONE_JWT_SECRET:?run scripts/ensure_compose_env.py first}
       G_ONE_JWT_ISSUER: ${G_ONE_JWT_ISSUER:-g-one}
       G_ONE_JWT_AUDIENCE: ${G_ONE_JWT_AUDIENCE:-g-one-api}
