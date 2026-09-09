@@ -29,10 +29,16 @@ services:
       G_ONE_JWT_ISSUER: ${G_ONE_JWT_ISSUER:-g-one}
       G_ONE_JWT_AUDIENCE: ${G_ONE_JWT_AUDIENCE:-g-one-api}
     ports:
-      - "${G_ONE_BIND_ADDRESS:-0.0.0.0}:${G_ONE_HTTP_PORT:-8000}:8000"
-    volumes:
-      - g-one-data:/var/lib/g-one
+      - "127.0.0.1:${G_ONE_HTTP_PORT:-8000}:8000"
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - backend
     init: true
 
 volumes:
-  g-one-data:
+  g-one-database:
+
+networks:
+  backend:
