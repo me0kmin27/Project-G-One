@@ -28,7 +28,9 @@ jobs:
           cache: pip
       - run: python -m pip install -e '.[dev]'
       - run: python -m compileall -q src tests migrations
-      - run: pytest -q
+      # Invoke pytest through the selected interpreter and keep repository
+      # deployment helpers importable from the checkout.
+      - run: python -m pytest -q
       - run: |
           G_ONE_DATABASE_URL=sqlite:///./migration-check.db alembic upgrade head
           G_ONE_DATABASE_URL=sqlite:///./migration-check.db alembic check

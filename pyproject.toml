@@ -27,3 +27,4 @@ packages = ["src/g_one"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--strict-markers"
+pythonpath = ["."]

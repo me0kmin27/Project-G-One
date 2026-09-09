@@ -1,1 +1,1 @@
-"""Importable server administration helpers for Project G-One."""
+"""Deployment and server-management helpers for Project G-One."""
