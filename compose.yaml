@@ -28,8 +28,9 @@ services:
       G_ONE_JWT_SECRET: ${G_ONE_JWT_SECRET:?run scripts/ensure_compose_env.py first}
       G_ONE_JWT_ISSUER: ${G_ONE_JWT_ISSUER:-g-one}
       G_ONE_JWT_AUDIENCE: ${G_ONE_JWT_AUDIENCE:-g-one-api}
+      G_ONE_CONSOLE_PASSWORD: ${G_ONE_CONSOLE_PASSWORD:?run scripts/ensure_compose_env.py first}
     ports:
-      - "127.0.0.1:${G_ONE_HTTP_PORT:-8000}:8000"
+      - "${G_ONE_HTTP_BIND:-0.0.0.0}:${G_ONE_HTTP_PORT:-8000}:8000"
     depends_on:
       database:
         condition: service_healthy

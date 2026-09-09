@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import hmac
 
 from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select, text
@@ -8,7 +9,7 @@ from .db import DatabaseSession
 from .models import AuditEvent, Device, SupportRequest
 from .schemas import (
     AuditEventRead,
-    DevelopmentSessionCreate,
+    ConsoleSessionCreate,
     DeviceCreate,
     DeviceRead,
     PrincipalRead,
@@ -21,15 +22,16 @@ from .schemas import (
 router = APIRouter()
 
 
-@router.post("/api/v1/session/development", response_model=SessionToken)
-def create_development_session(body: DevelopmentSessionCreate, request: Request) -> SessionToken:
+@router.post("/api/v1/session/console", response_model=SessionToken)
+def create_console_session(body: ConsoleSessionCreate, request: Request) -> SessionToken:
     settings = request.app.state.settings
-    if settings.environment != "development":
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "not found")
-    allowed_roles = {"user", "tenant_admin", "support", "auditor"}
-    if not body.roles or not body.roles.issubset(allowed_roles):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid role")
-    principal = Principal(body.subject, body.tenant_id, frozenset(body.roles))
+    if not hmac.compare_digest(body.password, settings.console_password):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid console credentials")
+    principal = Principal(
+        body.subject,
+        body.tenant_id,
+        frozenset({"tenant_admin", "support", "auditor"}),
+    )
     return SessionToken(access_token=encode_token(principal, settings))
 
 

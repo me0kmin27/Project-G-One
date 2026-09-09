@@ -14,10 +14,10 @@ class PrincipalRead(ApiModel):
     roles: list[str]
 
 
-class DevelopmentSessionCreate(ApiModel):
+class ConsoleSessionCreate(ApiModel):
     subject: str = Field(min_length=1, max_length=128)
     tenant_id: str = Field(min_length=1, max_length=128)
-    roles: set[str] = Field(default_factory=lambda: {"tenant_admin", "support", "auditor"})
+    password: str = Field(min_length=1, max_length=512)
 
     @field_validator("subject", "tenant_id")
     @classmethod

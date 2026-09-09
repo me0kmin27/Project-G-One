@@ -13,6 +13,7 @@ import urllib.error
 import urllib.request
 
 from configure_server import read_environment
+from ensure_compose_env import ensure_environment
 
 
 def compose(root: Path, *arguments: str, check: bool = True) -> int:
@@ -44,6 +45,9 @@ def main() -> None:
         parser.error("Docker is required. Install Docker Engine with the Compose plugin first.")
     if not (root / ".env").exists():
         parser.error("Server is not initialized. Run python3 scripts/setup_server.py first.")
+    additions = ensure_environment(root / ".env")
+    if additions:
+        print(f"Added {len(additions)} setting(s) required by this version.")
     env = read_environment(root / ".env")
     port = env.get("G_ONE_HTTP_PORT", "8000")
     if args.command == "start":

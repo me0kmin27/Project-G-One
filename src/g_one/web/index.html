@@ -12,11 +12,12 @@
     <section class="login-card" aria-labelledby="loginTitle">
       <div class="logo">G</div><p class="kicker">G-ONE CONTROL PLANE</p>
       <h1 id="loginTitle">안전한 인프라 관리의 시작</h1>
-      <p class="muted">개발 환경 계정으로 워크스페이스에 연결합니다. 운영 환경에서는 발급받은 액세스 토큰을 사용하세요.</p>
+      <p class="muted">콘솔 암호로 워크스페이스에 연결합니다. 반드시 HTTPS 리버스 프록시를 통해 접속하세요.</p>
       <form id="loginForm">
         <label>사용자 ID<input id="subject" value="admin" required maxlength="128" autocomplete="username"></label>
         <label>워크스페이스<input id="tenant" value="demo" required maxlength="128"></label>
-        <button class="btn primary" type="submit">개발 콘솔 시작</button>
+        <label>콘솔 암호<input id="consolePassword" type="password" required maxlength="512" autocomplete="current-password"></label>
+        <button class="btn primary" type="submit">관리 콘솔 시작</button>
       </form>
       <button id="tokenToggle" class="link-btn" type="button">발급된 토큰으로 연결</button>
       <form id="tokenForm" class="hidden"><label>Bearer 액세스 토큰<textarea id="accessToken" rows="4" required></textarea></label><button class="btn secondary" type="submit">토큰 연결</button></form>

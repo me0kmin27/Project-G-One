@@ -12,13 +12,13 @@ def test_admin_console_is_served(client):
     assert client.get("/assets/app.js").status_code == 200
 
 
-def test_development_console_can_create_a_session(client):
+def test_console_password_can_create_a_session(client):
     response = client.post(
-        "/api/v1/session/development",
+        "/api/v1/session/console",
         json={
             "subject": "console-admin",
             "tenant_id": "console-tenant",
-            "roles": ["tenant_admin", "support", "auditor"],
+            "password": "development-console-password",
         },
     )
     assert response.status_code == 200
@@ -28,6 +28,14 @@ def test_development_console_can_create_a_session(client):
         "tenant_id": "console-tenant",
         "roles": ["auditor", "support", "tenant_admin"],
     }
+
+
+def test_console_rejects_an_invalid_password(client):
+    response = client.post(
+        "/api/v1/session/console",
+        json={"subject": "admin", "tenant_id": "demo", "password": "wrong-password"},
+    )
+    assert response.status_code == 401
 
 
 def test_devices_are_tenant_and_owner_scoped(client, auth):

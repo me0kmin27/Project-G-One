@@ -11,6 +11,7 @@ import tempfile
 
 ALLOWED_SETTINGS = {
     "http-port": ("G_ONE_HTTP_PORT", lambda value: 1 <= int(value) <= 65535),
+    "http-bind": ("G_ONE_HTTP_BIND", lambda value: value in {"127.0.0.1", "0.0.0.0"}),
     "db-name": ("G_ONE_DB_NAME", lambda value: value.replace("_", "").isalnum()),
     "db-user": ("G_ONE_DB_USER", lambda value: value.replace("_", "").isalnum()),
     "jwt-issuer": ("G_ONE_JWT_ISSUER", lambda value: bool(value.strip())),
