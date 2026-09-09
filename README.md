@@ -47,6 +47,20 @@ API 문서는 `http://127.0.0.1:8000/docs`, 상태 확인은 `/healthz`와 `/rea
 슬라이스입니다. 실제 배포 전에는 Authentik OIDC/JWKS 검증과 PostgreSQL 마이그레이션을
 완료해야 합니다.
 
+### Docker Compose 배포
+
+배포 서버의 저장소 경로에서 다음 명령을 실행하면 누락된 `.env` 값을 안전한 권한으로
+생성하고 웹 컨테이너를 시작합니다. 기존 운영자 설정과 JWT 비밀은 덮어쓰지 않습니다.
+
+```bash
+python3 scripts/ensure_compose_env.py
+docker compose up -d --build --remove-orphans
+docker compose exec -T web python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=10).read()"
+```
+
+기본 공개 포트는 호스트의 `127.0.0.1:8000`으로 제한됩니다. 외부 HTTPS 접근은 별도의
+리버스 프록시에서 제공하고, 포트 변경이 필요하면 `.env`의 `G_ONE_HTTP_PORT`를 수정합니다.
+
 ## 문서 구조
 
 ```text

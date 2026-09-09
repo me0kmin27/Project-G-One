@@ -1,0 +1,20 @@
+services:
+  web:
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      G_ONE_ENVIRONMENT: production
+      G_ONE_DATABASE_URL: sqlite:////var/lib/g-one/g-one.db
+      G_ONE_JWT_SECRET: ${G_ONE_JWT_SECRET:?run scripts/ensure_compose_env.py first}
+      G_ONE_JWT_ISSUER: ${G_ONE_JWT_ISSUER:-g-one}
+      G_ONE_JWT_AUDIENCE: ${G_ONE_JWT_AUDIENCE:-g-one-api}
+    ports:
+      - "127.0.0.1:${G_ONE_HTTP_PORT:-8000}:8000"
+    volumes:
+      - g-one-data:/var/lib/g-one
+    init: true
+
+volumes:
+  g-one-data:
+
