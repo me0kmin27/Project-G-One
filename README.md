@@ -63,6 +63,29 @@ API 문서는 `http://127.0.0.1:8000/docs`, 상태 확인은 `/healthz`와 `/rea
 python3 scripts/setup_server.py
 ```
 
+위 명령 하나가 `.env` 생성, 이미지 준비, 웹 이미지 빌드, 컨테이너 시작, 준비 상태 및
+502 원인 점검까지 순서대로 완료합니다. **저장소를 이미 내려받은 서버에서는 아래 한 줄만
+실행하면 됩니다.**
+
+```bash
+cd /path/to/Project-G-One && python3 scripts/setup_server.py
+```
+
+명령이 끝난 뒤 리버스 프록시 upstream은 프록시 위치에 맞게 지정합니다.
+
+- 같은 서버의 프록시: `http://127.0.0.1:8000`
+- 다른 서버의 프록시: `http://G_ONE_SERVER_IP:8000`
+
+`502 Bad Gateway`가 나타나면 G-One 서버에서 다음 한 줄로 컨테이너, API 준비 상태,
+정적 파일과 프록시 대상 주소를 한 번에 검사하십시오.
+
+```bash
+cd /path/to/Project-G-One && python3 scripts/manage_server.py doctor
+```
+
+설치부터 프록시 연결까지의 정확한 순서는 [리버스 프록시 배포 가이드](docs/REVERSE_PROXY.md)의
+**처음 설치: 순서대로 실행** 절을 따르십시오.
+
 기본 공개 포트는 외부 리버스 프록시가 접속할 수 있도록 호스트의 `0.0.0.0:8000`에
 바인딩됩니다. 반드시 방화벽에서 이 포트를 리버스 프록시 서버 IP에만 허용하고 외부에는
 HTTPS 프록시 포트만 공개해야 합니다. 같은 호스트에서 프록시를 실행한다면
