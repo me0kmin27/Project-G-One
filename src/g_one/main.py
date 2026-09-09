@@ -7,7 +7,8 @@ from fastapi.staticfiles import StaticFiles
 
 from .api import router
 from .config import Settings
-from .db import Base, configure_database
+from .db import configure_database
+from .migrations import upgrade_database
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -16,7 +17,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        Base.metadata.create_all(engine)
+        # Schema changes must be explicit and repeatable in every environment.
+        # Running this before accepting traffic also keeps a newly deployed API
+        # from serving against an older schema.
+        upgrade_database(settings.database_url)
         yield
         engine.dispose()
 
