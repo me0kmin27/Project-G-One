@@ -7,8 +7,35 @@ def test_health_and_authentication(client):
 def test_admin_console_is_served(client):
     response = client.get("/")
     assert response.status_code == 200
-    assert "G-One · Overview" in response.text
+    assert "G-One · Control Plane" in response.text
     assert client.get("/assets/styles.css").status_code == 200
+    assert client.get("/assets/app.js").status_code == 200
+
+
+def test_console_password_can_create_a_session(client):
+    response = client.post(
+        "/api/v1/session/console",
+        json={
+            "subject": "console-admin",
+            "tenant_id": "console-tenant",
+            "password": "development-console-password",
+        },
+    )
+    assert response.status_code == 200
+    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
+    assert client.get("/api/v1/me", headers=headers).json() == {
+        "subject": "console-admin",
+        "tenant_id": "console-tenant",
+        "roles": ["auditor", "support", "tenant_admin"],
+    }
+
+
+def test_console_rejects_an_invalid_password(client):
+    response = client.post(
+        "/api/v1/session/console",
+        json={"subject": "admin", "tenant_id": "demo", "password": "wrong-password"},
+    )
+    assert response.status_code == 401
 
 
 def test_devices_are_tenant_and_owner_scoped(client, auth):
@@ -82,3 +109,24 @@ def test_support_request_cannot_cross_tenant(client, auth):
         headers=auth("helper", "tenant-b", ["support"]),
     )
     assert response.status_code == 404
+
+
+def test_support_request_list_is_tenant_and_owner_scoped(client, auth):
+    device = client.post(
+        "/api/v1/devices", json={"name": "Alice PC"}, headers=auth("alice", "tenant-a")
+    ).json()
+    client.post(
+        "/api/v1/support-requests",
+        json={
+            "target_device_id": device["id"],
+            "purpose": "Check network settings",
+            "permissions": ["screen_view"],
+        },
+        headers=auth("helper", "tenant-a", ["support"]),
+    )
+
+    assert len(client.get("/api/v1/support-requests", headers=auth("alice", "tenant-a")).json()) == 1
+    assert client.get("/api/v1/support-requests", headers=auth("bob", "tenant-a")).json() == []
+    assert client.get(
+        "/api/v1/support-requests", headers=auth("admin", "tenant-b", ["tenant_admin"])
+    ).json() == []

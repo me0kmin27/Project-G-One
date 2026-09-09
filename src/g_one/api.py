@@ -1,21 +1,47 @@
 from datetime import datetime, timedelta, timezone
+import hmac
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select, text
 
-from .auth import CurrentPrincipal
+from .auth import CurrentPrincipal, Principal, encode_token
 from .db import DatabaseSession
 from .models import AuditEvent, Device, SupportRequest
 from .schemas import (
     AuditEventRead,
+    ConsoleSessionCreate,
     DeviceCreate,
     DeviceRead,
+    PrincipalRead,
+    SessionToken,
     SupportDecision,
     SupportRequestCreate,
     SupportRequestRead,
 )
 
 router = APIRouter()
+
+
+@router.post("/api/v1/session/console", response_model=SessionToken)
+def create_console_session(body: ConsoleSessionCreate, request: Request) -> SessionToken:
+    settings = request.app.state.settings
+    if not hmac.compare_digest(body.password, settings.console_password):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid console credentials")
+    principal = Principal(
+        body.subject,
+        body.tenant_id,
+        frozenset({"tenant_admin", "support", "auditor"}),
+    )
+    return SessionToken(access_token=encode_token(principal, settings))
+
+
+@router.get("/api/v1/me", response_model=PrincipalRead)
+def get_current_principal(principal: CurrentPrincipal) -> PrincipalRead:
+    return PrincipalRead(
+        subject=principal.subject,
+        tenant_id=principal.tenant_id,
+        roles=sorted(principal.roles),
+    )
 
 
 def now() -> datetime:
@@ -121,6 +147,18 @@ def create_support_request(
     return request
 
 
+@router.get("/api/v1/support-requests", response_model=list[SupportRequestRead])
+def list_support_requests(principal: CurrentPrincipal, session: DatabaseSession):
+    statement = select(SupportRequest).where(SupportRequest.tenant_id == principal.tenant_id)
+    if principal.roles.isdisjoint({"tenant_admin", "support"}):
+        owned_device_ids = select(Device.id).where(
+            Device.tenant_id == principal.tenant_id,
+            Device.owner_id == principal.subject,
+        )
+        statement = statement.where(SupportRequest.target_device_id.in_(owned_device_ids))
+    return session.scalars(statement.order_by(SupportRequest.created_at.desc()).limit(200)).all()
+
+
 def get_support_request(session, tenant_id: str, request_id: str) -> SupportRequest:
     request = session.scalar(
         select(SupportRequest).where(
@@ -190,4 +228,3 @@ def list_audit_events(principal: CurrentPrincipal, session: DatabaseSession):
         .order_by(AuditEvent.occurred_at.desc())
         .limit(200)
     ).all()
-

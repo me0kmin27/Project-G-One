@@ -63,6 +63,33 @@ def decode_token(token: str, settings: Settings) -> Principal:
     return Principal(payload["sub"], payload["tenant_id"], frozenset(payload["roles"]))
 
 
+def encode_token(principal: Principal, settings: Settings, lifetime_seconds: int = 3600) -> str:
+    """Create a short-lived token for the development console.
+
+    Production deployments are expected to replace this flow with the configured
+    OIDC provider; the API endpoint that calls this helper is disabled there.
+    """
+    def encode(value: dict) -> str:
+        data = json.dumps(value, separators=(",", ":"), sort_keys=True).encode()
+        return base64.urlsafe_b64encode(data).decode().rstrip("=")
+
+    header = encode({"alg": "HS256", "typ": "JWT"})
+    payload = encode(
+        {
+            "sub": principal.subject,
+            "tenant_id": principal.tenant_id,
+            "roles": sorted(principal.roles),
+            "exp": int(time.time()) + lifetime_seconds,
+            "iss": settings.jwt_issuer,
+            "aud": settings.jwt_audience,
+        }
+    )
+    signature = base64.urlsafe_b64encode(
+        hmac.new(settings.jwt_secret.encode(), f"{header}.{payload}".encode(), hashlib.sha256).digest()
+    ).decode().rstrip("=")
+    return f"{header}.{payload}.{signature}"
+
+
 async def current_principal(
     request: Request,
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)],
@@ -73,4 +100,3 @@ async def current_principal(
 
 
 CurrentPrincipal = Annotated[Principal, Depends(current_principal)]
-
