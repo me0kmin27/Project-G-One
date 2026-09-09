@@ -58,40 +58,10 @@ API 문서는 `http://127.0.0.1:8000/docs`, 상태 확인은 `/healthz`와 `/rea
 python3 scripts/setup_server.py
 ```
 
-기본 공개 포트는 호스트의 `127.0.0.1:8000`으로 제한됩니다. 외부 HTTPS 접근은 별도의
-리버스 프록시에서 제공하고, 포트 변경이 필요하면 `.env`의 `G_ONE_HTTP_PORT`를 수정합니다.
-초기 구성만 만들고 나중에 시작하려면 `--no-start`를 사용합니다.
-
-```bash
-python3 scripts/setup_server.py --no-start
-```
-
-### 서버 설정 및 관리
-
-설정 스크립트는 허용된 항목만 안전하게 변경하며 `show` 출력에서는 암호를 숨깁니다.
-설정 변경 후에는 서버를 재시작해야 합니다.
-
-```bash
-python3 scripts/configure_server.py show
-python3 scripts/configure_server.py set http-port 8080
-python3 scripts/configure_server.py set db-name g_one
-```
-
-일상 운영은 관리 스크립트 하나로 처리할 수 있습니다.
-
-```bash
-python3 scripts/manage_server.py start       # 빌드, 기동, 준비 상태 확인
-python3 scripts/manage_server.py status      # 컨테이너 상태
-python3 scripts/manage_server.py logs        # 최근 로그 200줄
-python3 scripts/manage_server.py logs --follow
-python3 scripts/manage_server.py restart
-python3 scripts/manage_server.py update      # 이미지 갱신 후 재기동
-python3 scripts/manage_server.py stop
-```
-
-MariaDB 데이터는 `g-one-database` Docker 볼륨에 보존되며 `stop`은 볼륨을 삭제하지
-않습니다. 데이터까지 제거하는 `docker compose down --volumes`는 초기화가 명확히 필요한
-경우에만 직접 실행해야 합니다.
+기본적으로 관리 콘솔은 호스트의 모든 인터페이스에서 `8000` 포트로 공개되므로
+`http://<서버-IP>:8000/`에서 접속할 수 있습니다. 방화벽에서 해당 포트의 접근 범위를 반드시
+제한하세요. 같은 호스트의 HTTPS 리버스 프록시만 통해 접근하려면 `.env`에서
+`G_ONE_BIND_ADDRESS=127.0.0.1`로 변경합니다. 포트는 `G_ONE_HTTP_PORT`로 변경할 수 있습니다.
 
 ## 문서 구조
 

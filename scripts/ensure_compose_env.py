@@ -13,6 +13,7 @@ import tempfile
 DEFAULTS = {
     "G_ONE_JWT_ISSUER": "g-one",
     "G_ONE_JWT_AUDIENCE": "g-one-api",
+    "G_ONE_BIND_ADDRESS": "0.0.0.0",
     "G_ONE_HTTP_PORT": "8000",
     "G_ONE_DB_NAME": "g_one",
     "G_ONE_DB_USER": "g_one",
