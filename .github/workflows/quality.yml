@@ -27,10 +27,17 @@ jobs:
           python-version: "3.12"
           cache: pip
       - run: python -m pip install -e '.[dev]'
-      - run: python -m compileall -q src tests migrations
+      - run: python -m compileall -q src tests
       # Invoke pytest through the selected interpreter and keep repository
       # deployment helpers importable from the checkout.
       - run: python -m pytest -q
+      - name: Verify installed wheel contains migrations
+        run: |
+          python -m pip wheel --no-deps . --wheel-dir dist
+          python -m venv --system-site-packages /tmp/g-one-wheel-test
+          /tmp/g-one-wheel-test/bin/pip install --no-deps dist/*.whl
+          cd /tmp
+          /tmp/g-one-wheel-test/bin/python -c "from g_one.migrations import upgrade_database; upgrade_database('sqlite:////tmp/g-one-wheel-test.db')"
       - run: |
           G_ONE_DATABASE_URL=sqlite:///./migration-check.db alembic upgrade head
           G_ONE_DATABASE_URL=sqlite:///./migration-check.db alembic check

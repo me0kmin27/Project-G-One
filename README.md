@@ -152,7 +152,7 @@ MariaDB 데이터는 `g-one-database` Docker 볼륨에 보존되며 `stop`은 �
 │   ├── PROJECT_DIRECTION.md                    # 제품 요구사항, 아키텍처, 보안, MVP와 의사결정 기록
 │   ├── THREAT_MODEL.md                         # 신뢰 경계, STRIDE 위험과 출시 차단 조건
 │   └── WINDOWS_CLIENT_AND_SERVICE_REQUIREMENTS.md # Windows 앱·서비스 상세 요구사항
-├── migrations/                # 배포 간 데이터 보존을 위한 Alembic 스키마 이력
+├── src/g_one/alembic/         # 배포 간 데이터 보존을 위한 Alembic 스키마 이력
 ├── src/g_one/                 # FastAPI 제어면 서버
 ├── tests/                     # tenant 격리와 동의 흐름 API 테스트
 ├── pyproject.toml             # Python 패키지 및 개발 의존성
