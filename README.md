@@ -42,6 +42,7 @@ uvicorn g_one.main:app --reload
 ```
 
 API 문서는 `http://127.0.0.1:8000/docs`, 상태 확인은 `/healthz`와 `/readyz`에서 제공됩니다.
+관리 콘솔은 `http://127.0.0.1:8000/`에서 바로 확인할 수 있습니다.
 기본 SQLite 파일은 `g-one.db`이며 `G_ONE_DATABASE_URL`로 변경할 수 있습니다. 현재 구현은
 장치 등록·폐기, tenant 범위 조회, 원격 지원 요청·동의·종료 및 감사 조회의 첫 수직
 슬라이스입니다. 실제 배포 전에는 Authentik OIDC/JWKS 검증과 PostgreSQL 마이그레이션을
