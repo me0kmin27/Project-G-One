@@ -21,6 +21,21 @@ cd /path/to/Project-G-One && python3 scripts/setup_server.py
 cd /path/to/Project-G-One && python3 scripts/manage_server.py logs
 ```
 
+### 권한 오류가 표시되는 경우
+
+설치 스크립트는 Docker 소켓에 일반 사용자로 접근할 수 없으면 Docker 명령에만 자동으로
+`sudo`를 적용합니다. 프로젝트 파일 자체가 root 소유라면 출력된 `chown` 명령을 한 번
+실행한 뒤 설치 명령을 다시 실행하십시오. Docker 그룹을 영구적으로 적용하고 싶다면 다음
+한 줄을 실행하고 **로그아웃 후 다시 로그인**합니다.
+
+```bash
+sudo usermod -aG docker "$USER"
+```
+
+중요: `sudo python3 scripts/setup_server.py`를 실행하지 마십시오. 그렇게 하면 `.env`가 root
+소유가 되어 다음 업데이트에서 다시 권한 오류가 발생할 수 있습니다. 설치기는 권한 상승이
+필요한 Docker 명령만 제한적으로 `sudo`로 실행합니다.
+
 ### 2. 프록시의 위치에 맞춰 바인딩
 
 Nginx/Caddy가 **G-One과 같은 서버**에 있다면 아래 한 줄을 실행합니다.

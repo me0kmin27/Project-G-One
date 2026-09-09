@@ -71,6 +71,11 @@ python3 scripts/setup_server.py
 cd /path/to/Project-G-One && python3 scripts/setup_server.py
 ```
 
+설치기는 현재 사용자의 Docker 소켓 권한을 먼저 확인합니다. 직접 접근할 수 없으면 Docker
+명령에만 `sudo`를 사용하며, 프로젝트가 과거의 `sudo git` 실행 등으로 root 소유가 된
+경우에는 데이터를 변경하기 전에 정확한 소유권 복구 명령을 출력하고 중단합니다. 따라서
+`.env`를 root 소유로 새로 만들어 이후 실행을 망가뜨리지 않습니다.
+
 명령이 끝난 뒤 리버스 프록시 upstream은 프록시 위치에 맞게 지정합니다.
 
 - 같은 서버의 프록시: `http://127.0.0.1:8000`

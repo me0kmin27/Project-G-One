@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import time
@@ -13,11 +12,13 @@ import urllib.error
 import urllib.request
 
 from configure_server import read_environment
+from docker_access import docker_prefix, ensure_project_writable, fail
 from ensure_compose_env import ensure_environment
 
+DOCKER = ["docker"]
 
 def compose(root: Path, *arguments: str, check: bool = True) -> int:
-    return subprocess.run(["docker", "compose", *arguments], cwd=root, check=check).returncode
+    return subprocess.run([*DOCKER, "compose", *arguments], cwd=root, check=check).returncode
 
 
 def wait_until_ready(port: str, timeout: int = 90) -> bool:
@@ -79,10 +80,14 @@ def main() -> None:
     parser.add_argument("command", choices=("start", "stop", "restart", "status", "logs", "update", "doctor"))
     parser.add_argument("--follow", action="store_true", help="follow logs continuously")
     args = parser.parse_args()
-    if shutil.which("docker") is None:
-        parser.error("Docker is required. Install Docker Engine with the Compose plugin first.")
     if not (root / ".env").exists():
         parser.error("Server is not initialized. Run python3 scripts/setup_server.py first.")
+    try:
+        ensure_project_writable(root)
+        global DOCKER
+        DOCKER = docker_prefix()
+    except RuntimeError as error:
+        fail(str(error))
     additions = ensure_environment(root / ".env")
     if additions:
         print(f"Added {len(additions)} setting(s) required by this version.")
