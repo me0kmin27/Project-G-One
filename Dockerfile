@@ -8,6 +8,7 @@ WORKDIR /app
 
 COPY pyproject.toml README.md LICENSE alembic.ini ./
 COPY src ./src
+COPY migrations ./migrations
 RUN pip install --no-cache-dir .
 
 RUN addgroup --system g-one \
