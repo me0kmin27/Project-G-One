@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Project G-One control-plane API"
 requires-python = ">=3.12"
 dependencies = [
+  "alembic>=1.14,<2",
   "fastapi>=0.115,<1",
   "pymysql>=1.1,<2",
   "sqlalchemy>=2.0,<3",
@@ -25,3 +26,5 @@ packages = ["src/g_one"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--strict-markers"
+pythonpath = ["."]

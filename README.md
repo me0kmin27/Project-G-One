@@ -41,6 +41,14 @@ export G_ONE_JWT_SECRET='replace-with-at-least-32-random-bytes'
 uvicorn g_one.main:app --reload
 ```
 
+서버는 시작할 때 Alembic 마이그레이션을 자동 적용합니다. 스키마만 미리 반영하거나 변경
+누락 여부를 확인하려면 다음 명령을 사용합니다.
+
+```bash
+alembic upgrade head
+alembic check
+```
+
 API 문서는 `http://127.0.0.1:8000/docs`, 상태 확인은 `/healthz`와 `/readyz`에서 제공됩니다.
 관리 콘솔은 `http://127.0.0.1:8000/`에서 바로 확인할 수 있습니다.
 콘솔 첫 화면에서는 사용자 ID, 워크스페이스와 `G_ONE_CONSOLE_PASSWORD`를 입력해 단기
@@ -50,8 +58,8 @@ API 문서는 `http://127.0.0.1:8000/docs`, 상태 확인은 `/healthz`와 `/rea
 지원 요청 및 감사 로그 조회를 수행할 수 있습니다.
 기본 SQLite 파일은 `g-one.db`이며 `G_ONE_DATABASE_URL`로 변경할 수 있습니다. 현재 구현은
 장치 등록·폐기, tenant 범위 조회, 원격 지원 요청·동의·종료 및 감사 조회의 첫 수직
-슬라이스입니다. 실제 배포 전에는 Authentik OIDC/JWKS 검증과 MariaDB 스키마 마이그레이션
-체계를 완료해야 합니다.
+슬라이스입니다. 실제 인터넷 연결 배포 전에는 Authentik OIDC/JWKS 검증과 MariaDB
+백업·복구 훈련을 완료해야 합니다.
 
 ### Docker Compose + MariaDB 배포
 
@@ -142,7 +150,9 @@ MariaDB 데이터는 `g-one-database` Docker 볼륨에 보존되며 `stop`은 �
 ├── README.md                  # 프로젝트 소개와 빠른 시작
 ├── docs/
 │   ├── PROJECT_DIRECTION.md                    # 제품 요구사항, 아키텍처, 보안, MVP와 의사결정 기록
+│   ├── THREAT_MODEL.md                         # 신뢰 경계, STRIDE 위험과 출시 차단 조건
 │   └── WINDOWS_CLIENT_AND_SERVICE_REQUIREMENTS.md # Windows 앱·서비스 상세 요구사항
+├── src/g_one/alembic/         # 배포 간 데이터 보존을 위한 Alembic 스키마 이력
 ├── src/g_one/                 # FastAPI 제어면 서버
 ├── tests/                     # tenant 격리와 동의 흐름 API 테스트
 ├── pyproject.toml             # Python 패키지 및 개발 의존성
