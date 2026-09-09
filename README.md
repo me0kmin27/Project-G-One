@@ -59,8 +59,10 @@ docker compose up -d --build --remove-orphans
 docker compose exec -T web python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=10).read()"
 ```
 
-기본 공개 포트는 호스트의 `127.0.0.1:8000`으로 제한됩니다. 외부 HTTPS 접근은 별도의
-리버스 프록시에서 제공하고, 포트 변경이 필요하면 `.env`의 `G_ONE_HTTP_PORT`를 수정합니다.
+기본적으로 관리 콘솔은 호스트의 모든 인터페이스에서 `8000` 포트로 공개되므로
+`http://<서버-IP>:8000/`에서 접속할 수 있습니다. 방화벽에서 해당 포트의 접근 범위를 반드시
+제한하세요. 같은 호스트의 HTTPS 리버스 프록시만 통해 접근하려면 `.env`에서
+`G_ONE_BIND_ADDRESS=127.0.0.1`로 변경합니다. 포트는 `G_ONE_HTTP_PORT`로 변경할 수 있습니다.
 
 ## 문서 구조
 
