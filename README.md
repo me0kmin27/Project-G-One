@@ -5,14 +5,16 @@ Python 웹 관리 환경에서 운영하기 위한 중앙관리형 플랫폼입�
 최소 권한 정책을 바탕으로 사용자·장치·서비스 연결을 통제하고 감사할 수 있습니다.
 
 > 이 문서는 프로젝트의 첫 진입점입니다. 프로젝트의 상세 방향과 의사결정 기준은
-> [프로젝트 방향 문서](docs/PROJECT_DIRECTION.md)에서 관리합니다.
+> [프로젝트 방향 문서](docs/PROJECT_DIRECTION.md)에서 관리합니다. Windows 프로그램의 상세
+> 기준은 [Windows 클라이언트 및 서비스 요구사항](docs/WINDOWS_CLIENT_AND_SERVICE_REQUIREMENTS.md)을 따릅니다.
 
 ## 현재 상태
 
-- 단계: **요구사항 기준선 및 위험 검증**
-- 확정된 내용: WireGuard, Python 웹 제어면, SMB 우선 파일 서비스, SSO, 동의 기반 원격 지원
+- 단계: **Windows 제품 요구사항 기준선 및 위험 검증**
+- 확정된 내용: Windows 전용 클라이언트, 매 실행 대화형 로그인, 자동 VPN·SMB 구성,
+  WireGuard 중계, 파일별 권한, 티켓·동의 기반 원격 지원, 자체 호스팅과 멀티테넌시
 - 통합 후보: Authentik, Synology, Proxmox, Vaultwarden
-- 결정이 필요한 내용: 배포 규모, 클라이언트 OS, 구체 프레임워크, 원격 지원 프로토콜, 운영 목표
+- 결정이 필요한 내용: 배포 규모, 지원 Windows 버전, 구체 프레임워크, 원격 지원 프로토콜, 운영 목표
 
 SMB를 1차 대상으로 삼지만 NFS, WebDAV 및 다른 프로토콜의 추가를 막지 않는 어댑터
 구조를 지향합니다. 세부 구현은 위협 모델과 대상 환경을 검증한 뒤 확정합니다.
@@ -40,7 +42,8 @@ SMB를 1차 대상으로 삼지만 NFS, WebDAV 및 다른 프로토콜의 추가
 .
 ├── README.md                  # 프로젝트 소개와 빠른 시작
 ├── docs/
-│   └── PROJECT_DIRECTION.md  # 제품 요구사항, 아키텍처, 보안, MVP와 의사결정 기록
+│   ├── PROJECT_DIRECTION.md                    # 제품 요구사항, 아키텍처, 보안, MVP와 의사결정 기록
+│   └── WINDOWS_CLIENT_AND_SERVICE_REQUIREMENTS.md # Windows 앱·서비스 상세 요구사항
 └── LICENSE                    # GNU GPL v3 라이선스 전문
 ```
 
