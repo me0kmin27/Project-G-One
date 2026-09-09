@@ -1,3 +1,5 @@
+name: g-one
+
 services:
   database:
     image: mariadb:11.4
