@@ -20,6 +20,8 @@ jobs:
       G_ONE_DB_ROOT_PASSWORD: ci-root-password
       G_ONE_JWT_SECRET: ci-jwt-secret-with-at-least-32-bytes
       G_ONE_CONSOLE_PASSWORD: ci-console-password
+      # A deterministic, non-production 32-byte key used only to validate Compose interpolation.
+      G_ONE_WIREGUARD_PRIVATE_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
