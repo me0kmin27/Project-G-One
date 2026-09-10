@@ -1,7 +1,7 @@
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>[...root.querySelectorAll(selector)];
-const state={token:sessionStorage.getItem('g-one-token')||'',me:null,devices:[],support:[],audit:[],vpn:null,peers:[]};
-const labels={overview:'개요',devices:'장치',vpn:'WireGuard 관리',support:'원격 지원',audit:'감사 로그'};
+const state={token:sessionStorage.getItem('g-one-token')||'',me:null,devices:[],support:[],audit:[],vpn:null,peers:[],workspace:null,users:[],tokens:[],roles:[]};
+const labels={overview:'개요',workspace:'워크스페이스 관리',users:'사용자 관리',tokens:'토큰 관리',roles:'권한 관리',devices:'장치',vpn:'WireGuard 관리',support:'원격 지원',audit:'감사 로그'};
 
 async function api(path,options={}){
   const headers={'Content-Type':'application/json',...(options.headers||{})};
@@ -46,6 +46,15 @@ function renderDeviceTable(){
   const devices=state.devices.filter(d=>`${d.name} ${d.owner_id} ${d.platform}`.toLocaleLowerCase().includes(query));
   $('#devicesTable').innerHTML=devices.length?`<table class="data-table"><thead><tr><th>장치</th><th>소유자</th><th>플랫폼</th><th>상태</th><th>등록일</th><th></th></tr></thead><tbody>${devices.map(d=>`<tr><td><strong>${escapeHtml(d.name)}</strong></td><td>${escapeHtml(d.owner_id)}</td><td>${escapeHtml(d.platform)}</td><td><span class="status ${d.status}">${statusLabel(d.status)}</span></td><td>${date(d.created_at)}</td><td>${d.status==='registered'?`<button class="danger-btn" data-revoke="${d.id}">접근 회수</button>`:''}</td></tr>`).join('')}</tbody></table>`:empty(query?'검색 결과가 없습니다.':'첫 장치를 등록해 보세요.');
 }
+async function loadManagement(){
+  try{
+    [state.workspace,state.users,state.tokens,state.roles]=await Promise.all(['/api/v1/workspace','/api/v1/users','/api/v1/tokens','/api/v1/roles'].map(api));
+    $('#workspaceId').value=state.workspace.id;$('#workspaceDisplayName').value=state.workspace.name;
+    $('#usersTable').innerHTML=state.users.length?`<table class="data-table"><thead><tr><th>사용자</th><th>이메일</th><th>역할</th><th>상태</th></tr></thead><tbody>${state.users.map(u=>`<tr><td><strong>${escapeHtml(u.display_name)}</strong><small>${escapeHtml(u.subject)}</small></td><td>${escapeHtml(u.email||'—')}</td><td>${u.roles.map(escapeHtml).join(', ')||'—'}</td><td><span class="status ${u.status==='active'?'registered':'revoked'}">${u.status==='active'?'활성':'중지'}</span></td></tr>`).join('')}</tbody></table>`:empty('등록된 사용자가 없습니다.');
+    $('#tokensTable').innerHTML=state.tokens.length?`<table class="data-table"><thead><tr><th>이름</th><th>접두사</th><th>범위</th><th>만료</th><th></th></tr></thead><tbody>${state.tokens.map(t=>`<tr><td><strong>${escapeHtml(t.name)}</strong></td><td><code>${escapeHtml(t.prefix)}…</code></td><td>${t.scopes.map(escapeHtml).join(', ')}</td><td>${date(t.expires_at)}</td><td>${t.revoked_at?'회수됨':`<button class="danger-btn" data-revoke-token="${t.id}">회수</button>`}</td></tr>`).join('')}</tbody></table>`:empty('발급된 토큰이 없습니다.');
+    $('#rolesGrid').innerHTML=state.roles.map(r=>`<article><div class="metric-top"><span>${escapeHtml(r.name)}</span><i class="metric-icon purple">◈</i></div><strong>${escapeHtml(r.id)}</strong><small>${r.permissions.map(escapeHtml).join(' · ')}</small></article>`).join('');
+  }catch(error){showError(error);}
+}
 async function loadVpn(){
   try{state.vpn=await api('/api/v1/vpn/network');state.peers=await api('/api/v1/vpn/peers');}
   catch(error){if(error.message==='VPN network not configured'){state.vpn=null;state.peers=[];}else{showError(error);}}
@@ -65,7 +74,7 @@ async function connect(){
     $('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');await loadData();
   }catch(error){state.token='';sessionStorage.removeItem('g-one-token');$('#loginError').textContent=`연결 실패: ${error.message}`;$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');}
 }
-function go(page){$$('.page').forEach(el=>el.classList.toggle('hidden',el.dataset.view!==page));$$('.nav').forEach(el=>el.classList.toggle('active',el.dataset.page===page));$('#pageTitle').textContent=labels[page];$('#sidebar').classList.remove('open');if(page==='audit')loadAudit();if(page==='vpn')loadVpn();}
+function go(page){$$('.page').forEach(el=>el.classList.toggle('hidden',el.dataset.view!==page));$$('.nav').forEach(el=>el.classList.toggle('active',el.dataset.page===page));$('#pageTitle').textContent=labels[page];$('#sidebar').classList.remove('open');if(page==='audit')loadAudit();if(page==='vpn')loadVpn();if(['workspace','users','tokens','roles'].includes(page))loadManagement();}
 async function loadAudit(){try{state.audit=await api('/api/v1/audit-events');$('#auditTable').innerHTML=state.audit.length?`<table class="data-table"><thead><tr><th>작업</th><th>행위자</th><th>대상</th><th>결과</th><th>시각</th></tr></thead><tbody>${state.audit.map(e=>`<tr><td><strong>${escapeHtml(e.action)}</strong></td><td>${escapeHtml(e.actor_id)}</td><td>${escapeHtml(e.target_type)} · ${escapeHtml(e.target_id.slice(0,8))}</td><td>${escapeHtml(e.outcome)}</td><td>${date(e.occurred_at)}</td></tr>`).join('')}</tbody></table>`:empty('감사 이벤트가 없습니다.');}catch(error){$('#auditTable').innerHTML=empty(`조회할 수 없습니다: ${error.message}`);}}
 
 $('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';const button=e.submitter;setBusy(button,true,'연결하는 중…');try{const result=await api('/api/v1/session/console',{method:'POST',body:JSON.stringify({subject:$('#subject').value,tenant_id:$('#tenant').value,password:$('#consolePassword').value})});state.token=result.access_token;await connect();}catch(error){$('#loginError').textContent=`로그인 실패: ${error.message}`;}finally{setBusy(button,false);}});
@@ -77,6 +86,12 @@ $('#deviceForm').addEventListener('submit',async e=>{e.preventDefault();try{awai
 $('#supportForm').addEventListener('submit',async e=>{e.preventDefault();const permissions=$$('input[name="permission"]:checked').map(el=>el.value);if(!permissions.length)return toast('권한을 하나 이상 선택하세요.');try{await api('/api/v1/support-requests',{method:'POST',body:JSON.stringify({target_device_id:$('#supportDevice').value,purpose:$('#supportPurpose').value,permissions})});e.target.reset();$('#supportDialog').close();toast('지원 요청을 보냈습니다.');await loadData();}catch(error){showError(error);}});
 $('#devicesTable').addEventListener('click',async e=>{const id=e.target.dataset.revoke;if(!id||!confirm('이 장치의 접근을 회수할까요?'))return;try{await api(`/api/v1/devices/${id}`,{method:'DELETE'});toast('장치 접근을 회수했습니다.');await loadData();}catch(error){showError(error);}});$('#refreshAudit').onclick=loadAudit;
 $('#deviceSearch').addEventListener('input',renderDeviceTable);
+$('#addUser').onclick=()=>$('#userDialog').showModal();
+$('#addToken').onclick=()=>$('#tokenDialog').showModal();
+$('#workspaceForm').addEventListener('submit',async event=>{event.preventDefault();try{await api('/api/v1/workspace',{method:'PUT',body:JSON.stringify({name:$('#workspaceDisplayName').value})});toast('워크스페이스를 저장했습니다.');await loadManagement();}catch(error){showError(error);}});
+$('#userForm').addEventListener('submit',async event=>{event.preventDefault();const roles=$$('input[name="userRole"]:checked').map(el=>el.value);try{await api('/api/v1/users',{method:'POST',body:JSON.stringify({subject:$('#userSubject').value,display_name:$('#userName').value,email:$('#userEmail').value||null,roles})});event.target.reset();$('#userDialog').close();toast('사용자를 등록했습니다.');await loadManagement();}catch(error){showError(error);}});
+$('#tokenCreateForm').addEventListener('submit',async event=>{event.preventDefault();const scopes=$$('input[name="tokenScope"]:checked').map(el=>el.value);if(!scopes.length)return toast('범위를 하나 이상 선택하세요.');try{const issued=await api('/api/v1/tokens',{method:'POST',body:JSON.stringify({name:$('#tokenName').value,scopes,lifetime_days:Number($('#tokenDays').value)})});event.target.reset();$('#tokenDialog').close();$('#issuedToken').value=issued.token;$('#issuedTokenDialog').showModal();await loadManagement();}catch(error){showError(error);}});
+$('#tokensTable').addEventListener('click',async event=>{const id=event.target.dataset.revokeToken;if(!id||!confirm('이 토큰을 즉시 회수할까요?'))return;try{await api(`/api/v1/tokens/${id}`,{method:'DELETE'});toast('토큰을 회수했습니다.');await loadManagement();}catch(error){showError(error);}});
 $('#configureVpn').onclick=()=>{if(state.vpn){$('#vpnName').value=state.vpn.name;$('#vpnCidr').value=state.vpn.address_cidr;$('#vpnEndpoint').value=state.vpn.endpoint;$('#vpnPort').value=state.vpn.listen_port;$('#vpnDns').value=state.vpn.dns||'';}$('#vpnDialog').showModal();};
 function openPeerDialog(){if(!state.vpn)return toast('먼저 VPN 서버를 설정하세요.');$('#peerAllowedIps').value=state.vpn.network_route;$('#peerDialog').showModal();}
 $('#addPeer').onclick=openPeerDialog;$$('[data-add-peer]').forEach(button=>button.onclick=openPeerDialog);$$('[data-edit-server]').forEach(button=>button.onclick=()=>$('#configureVpn').click());

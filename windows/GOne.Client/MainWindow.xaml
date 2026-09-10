@@ -1,0 +1,24 @@
+<Window x:Class="GOne.Client.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="G-One Windows Client" Height="620" Width="900" MinHeight="520" MinWidth="720" Background="#F4F7FB">
+  <Grid Margin="32">
+    <Grid x:Name="LoginPanel">
+      <Border Width="440" Padding="36" Background="White" CornerRadius="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel><TextBlock Text="G-ONE" FontSize="18" FontWeight="Bold" Foreground="#3154D5"/><TextBlock Text="워크스페이스 연결" FontSize="28" FontWeight="Bold" Margin="0,12,0,8"/><TextBlock Text="앱을 실행할 때마다 대화형 로그인이 필요합니다." Foreground="#64748B" Margin="0,0,0,24"/>
+          <TextBlock Text="서버 주소"/><TextBox x:Name="ServerBox" Text="http://localhost:8000" Margin="0,6,0,14" Padding="10"/>
+          <TextBlock Text="사용자 ID"/><TextBox x:Name="SubjectBox" Margin="0,6,0,14" Padding="10"/>
+          <TextBlock Text="워크스페이스"/><TextBox x:Name="TenantBox" Margin="0,6,0,14" Padding="10"/>
+          <TextBlock Text="콘솔 암호"/><PasswordBox x:Name="PasswordBox" Margin="0,6,0,20" Padding="10"/>
+          <Button x:Name="LoginButton" Content="안전하게 연결" Padding="12" Background="#3154D5" Foreground="White" Click="Login_Click"/>
+          <TextBlock x:Name="LoginError" Foreground="#DC2626" TextWrapping="Wrap" Margin="0,12,0,0"/>
+        </StackPanel>
+      </Border>
+    </Grid>
+    <Grid x:Name="DashboardPanel" Visibility="Collapsed">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+      <DockPanel Margin="0,0,0,24"><StackPanel DockPanel.Dock="Left"><TextBlock Text="G-ONE WINDOWS" Foreground="#3154D5" FontWeight="Bold"/><TextBlock x:Name="WelcomeText" FontSize="26" FontWeight="Bold"/></StackPanel><Button Content="로그아웃 및 정리" HorizontalAlignment="Right" Padding="16,8" Click="Logout_Click"/></DockPanel>
+      <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition/></Grid.ColumnDefinitions>
+        <Border Background="White" CornerRadius="14" Padding="24" Margin="0,0,10,0"><StackPanel><TextBlock Text="연결 상태" FontSize="20" FontWeight="Bold"/><TextBlock Text="● API 연결됨" Foreground="#15803D" Margin="0,18,0,8"/><TextBlock Text="VPN과 파일 공유 자동 구성은 장치 정책 API 연결 후 활성화됩니다." TextWrapping="Wrap" Foreground="#64748B"/></StackPanel></Border>
+        <Border Grid.Column="1" Background="White" CornerRadius="14" Padding="24" Margin="10,0,0,0"><StackPanel><TextBlock Text="내 장치" FontSize="20" FontWeight="Bold"/><ListBox x:Name="DevicesList" Margin="0,14,0,0" DisplayMemberPath="name"/></StackPanel></Border>
+      </Grid>
+    </Grid>
+  </Grid>
+</Window>
