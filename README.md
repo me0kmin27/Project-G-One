@@ -157,6 +157,9 @@ MariaDB 데이터는 `g-one-database` Docker 볼륨에 보존되며 `stop`은 �
 허용하고 콘솔에 입력한 엔드포인트 DNS가 서버 공인 IP를 가리키게 하십시오. 포트를 바꾸면
 `.env`와 웹 서버 설정의 포트를 동일하게 변경한 후 컨테이너를 다시 시작해야 합니다.
 런타임 적용이 필요 없는 개발 환경에서는 `G_ONE_WIREGUARD_APPLY=false`를 사용합니다.
+업데이트 후에는 `restart`가 아니라 `python3 scripts/manage_server.py update`를 실행해야 새
+이미지의 WireGuard 및 방화벽 설정이 적용됩니다. 컨테이너가 다시 시작될 때 저장된 VPN과
+피어 설정으로 `wg0` 인터페이스도 자동 복원됩니다.
 
 생성되는 클라이언트 설정은 VPN CIDR만 라우팅하는 split tunnel 방식입니다. IPv4 서버
 설정에는 전달 및 masquerade 규칙이 자동으로 적용되므로 클라이언트 `AllowedIPs`에 LAN
