@@ -51,6 +51,19 @@ def test_server_config_excludes_revoked_peers():
     config = render_server_config(network, peers, private_key)
     assert active_public_key in config
     assert revoked_public_key not in config
+    assert "PostUp = iptables -A FORWARD -i %i -j ACCEPT" in config
+    assert "iptables -t nat -A POSTROUTING -s 10.44.0.0/24 -j MASQUERADE" in config
+    assert "PostDown = iptables -D FORWARD -i %i -j ACCEPT" in config
+
+
+def test_server_config_does_not_add_ipv4_firewall_rules_to_ipv6_network():
+    private_key, _ = generate_keypair()
+    network = SimpleNamespace(address_cidr="fd42::1/64", listen_port=51820)
+
+    config = render_server_config(network, [], private_key)
+
+    assert "PostUp" not in config
+    assert "iptables" not in config
 
 
 def test_normalizes_client_routes_and_rejects_invalid_values():
