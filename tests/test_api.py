@@ -12,31 +12,72 @@ def test_admin_console_is_served(client):
     assert client.get("/assets/app.js").status_code == 200
 
 
-def test_console_password_can_create_a_session(client):
+def test_first_login_creates_only_the_administrator_then_requires_a_workspace(client):
+    assert client.get("/api/v1/setup/status").json() == {"administrator_required": True}
+
+    response = client.post(
+        "/api/v1/session/login",
+        json={"subject": "owner", "tenant_id": "acme", "password": "correct-horse"},
+    )
+    assert response.status_code == 200
+    headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
+    assert client.get("/api/v1/me", headers=headers).json()["roles"] == ["tenant_admin"]
+    assert client.get("/api/v1/setup/status").json() == {"administrator_required": False}
+    assert client.get("/api/v1/workspace", headers=headers).status_code == 404
+    assert client.post(
+        "/api/v1/users",
+        json={"subject": "alice", "display_name": "Alice", "password": "correct-horse"},
+        headers=headers,
+    ).status_code == 409
+
+    workspace = client.put(
+        "/api/v1/workspace", json={"name": "ACME Operations"}, headers=headers
+    )
+    assert workspace.status_code == 200
+    assert workspace.json()["id"] == "acme"
+
+
+def test_later_login_cannot_claim_an_administrator_account(client):
+    client.post(
+        "/api/v1/session/login",
+        json={"subject": "owner", "tenant_id": "acme", "password": "correct-horse"},
+    )
+    response = client.post(
+        "/api/v1/session/login",
+        json={"subject": "attacker", "tenant_id": "other", "password": "another-password"},
+    )
+    assert response.status_code == 401
+
+
+def test_console_password_only_impersonates_a_provisioned_administrator(client):
+    login = client.post(
+        "/api/v1/session/login",
+        json={"subject": "owner", "tenant_id": "acme", "password": "correct-horse"},
+    )
+    assert login.status_code == 200
     response = client.post(
         "/api/v1/session/console",
         json={
-            "subject": "console-admin",
-            "tenant_id": "console-tenant",
+            "subject": "owner",
+            "tenant_id": "acme",
             "password": "development-console-password",
         },
     )
     assert response.status_code == 200
     headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
     assert client.get("/api/v1/me", headers=headers).json() == {
-        "subject": "console-admin",
-        "tenant_id": "console-tenant",
-        "roles": ["auditor", "support", "tenant_admin"],
+        "subject": "owner",
+        "tenant_id": "acme",
+        "roles": ["tenant_admin"],
     }
 
 
-def test_console_rejects_an_invalid_password(client):
+def test_console_rejects_unprovisioned_identity(client):
     response = client.post(
         "/api/v1/session/console",
-        json={"subject": "admin", "tenant_id": "demo", "password": "wrong-password"},
+        json={"subject": "admin", "tenant_id": "demo", "password": "development-console-password"},
     )
     assert response.status_code == 401
-
 
 def test_admin_manages_workspace_users_roles_and_tokens(client, auth):
     admin = auth("admin", "acme", ["tenant_admin"])

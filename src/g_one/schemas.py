@@ -38,6 +38,10 @@ class SessionToken(ApiModel):
     token_type: str = "bearer"
 
 
+class SetupStatus(ApiModel):
+    administrator_required: bool
+
+
 class WorkspaceUpdate(ApiModel):
     name: str = Field(min_length=1, max_length=128)
 

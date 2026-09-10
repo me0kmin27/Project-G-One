@@ -6,12 +6,12 @@ import secrets
 import subprocess
 
 from fastapi import APIRouter, HTTPException, Request, status
-from sqlalchemy import select, text
+from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from .auth import CurrentPrincipal, Principal, encode_token
 from .db import DatabaseSession
-from .models import ApiToken, AuditEvent, Device, SupportRequest, VpnNetwork, VpnPeer, Workspace, WorkspaceUser
+from .models import ApiToken, AuditEvent, Device, InstallationState, SupportRequest, VpnNetwork, VpnPeer, Workspace, WorkspaceUser
 from .passwords import hash_password, verify_password
 from .schemas import (
     AuditEventRead,
@@ -24,6 +24,7 @@ from .schemas import (
     DeviceRead,
     PrincipalRead,
     SessionToken,
+    SetupStatus,
     RoleRead,
     SupportDecision,
     SupportRequestCreate,
@@ -64,32 +65,70 @@ TOKEN_SCOPES = {"devices:read", "devices:write", "vpn:read", "support:read", "au
 
 
 @router.post("/api/v1/session/console", response_model=SessionToken)
-def create_console_session(body: ConsoleSessionCreate, request: Request) -> SessionToken:
+def create_console_session(
+    body: ConsoleSessionCreate, request: Request, session: DatabaseSession
+) -> SessionToken:
     settings = request.app.state.settings
     if not hmac.compare_digest(body.password, settings.console_password):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid console credentials")
-    principal = Principal(
-        body.subject,
-        body.tenant_id,
-        frozenset({"tenant_admin", "support", "auditor"}),
+    user = session.scalar(
+        select(WorkspaceUser).where(
+            WorkspaceUser.tenant_id == body.tenant_id,
+            WorkspaceUser.subject == body.subject,
+            WorkspaceUser.status == "active",
+        )
     )
+    if user is None or "tenant_admin" not in user.roles:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "provisioned administrator required")
+    principal = Principal(user.subject, user.tenant_id, frozenset(user.roles))
     return SessionToken(access_token=encode_token(principal, settings))
+
+
+@router.get("/api/v1/setup/status", response_model=SetupStatus)
+def read_setup_status(session: DatabaseSession) -> SetupStatus:
+    state = session.get(InstallationState, 1)
+    return SetupStatus(administrator_required=state is None or not state.initialized)
 
 
 @router.post("/api/v1/session/login", response_model=SessionToken)
 def create_user_session(
     body: UserSessionCreate, request: Request, session: DatabaseSession
 ) -> SessionToken:
+    subject = body.subject.strip()
+    tenant_id = body.tenant_id.strip()
     user = session.scalar(
         select(WorkspaceUser).where(
-            WorkspaceUser.tenant_id == body.tenant_id.strip(),
-            WorkspaceUser.subject == body.subject.strip(),
+            WorkspaceUser.tenant_id == tenant_id,
+            WorkspaceUser.subject == subject,
             WorkspaceUser.status == "active",
         )
     )
+    if user is None:
+        claimed = session.execute(
+            update(InstallationState)
+            .where(InstallationState.id == 1, InstallationState.initialized.is_(False))
+            .values(initialized=True)
+        )
+        if claimed.rowcount == 1:
+            user = WorkspaceUser(
+                tenant_id=tenant_id,
+                subject=subject,
+                display_name=subject,
+                password_hash=hash_password(body.password),
+                roles=["tenant_admin"],
+            )
+            session.add(user)
+            session.flush()
+            principal = Principal(user.subject, user.tenant_id, frozenset(user.roles))
+            audit(session, principal, "installation.admin_created", "user", user.id)
+            session.commit()
     if user is None or not verify_password(body.password, user.password_hash):
+        session.rollback()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid account credentials")
     principal = Principal(user.subject, user.tenant_id, frozenset(user.roles))
+    workspace = session.get(Workspace, user.tenant_id)
+    if workspace is None and "tenant_admin" not in user.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "workspace has not been created")
     audit(session, principal, "session.login", "user", user.id)
     session.commit()
     return SessionToken(access_token=encode_token(principal, request.app.state.settings))
@@ -134,9 +173,7 @@ def read_workspace(principal: CurrentPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin")
     workspace = session.get(Workspace, principal.tenant_id)
     if workspace is None:
-        workspace = Workspace(id=principal.tenant_id, name=principal.tenant_id)
-        session.add(workspace)
-        session.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "workspace has not been created")
     return workspace
 
 
@@ -170,6 +207,8 @@ def list_users(principal: CurrentPrincipal, session: DatabaseSession):
 @router.post("/api/v1/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def create_user(body: UserCreate, principal: CurrentPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin")
+    if session.get(Workspace, principal.tenant_id) is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "create the workspace before adding users")
     network = session.scalar(select(VpnNetwork).where(VpnNetwork.tenant_id == principal.tenant_id))
     try:
         vpn_address = address_belongs(network.address_cidr, body.vpn_address) if network and body.vpn_address else None
