@@ -53,7 +53,23 @@ def generate_keypair() -> tuple[str, str]:
 
 def render_server_config(network, peers, private_key: str) -> str:
     validate_key(private_key)
-    lines = ["[Interface]", f"PrivateKey = {private_key}", f"Address = {network.address_cidr}", f"ListenPort = {network.listen_port}"]
+    interface = ipaddress.ip_interface(network.address_cidr)
+    lines = [
+        "[Interface]",
+        f"PrivateKey = {private_key}",
+        f"Address = {network.address_cidr}",
+        f"ListenPort = {network.listen_port}",
+    ]
+    if interface.version == 4:
+        vpn_network = interface.network
+        lines += [
+            "PostUp = iptables -A FORWARD -i %i -j ACCEPT; "
+            "iptables -A FORWARD -o %i -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT; "
+            f"iptables -t nat -A POSTROUTING -s {vpn_network} -j MASQUERADE",
+            "PostDown = iptables -D FORWARD -i %i -j ACCEPT; "
+            "iptables -D FORWARD -o %i -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT; "
+            f"iptables -t nat -D POSTROUTING -s {vpn_network} -j MASQUERADE",
+        ]
     for peer in peers:
         if peer.enabled:
             lines += ["", "[Peer]", f"# {peer.name}", f"PublicKey = {peer.public_key}", f"AllowedIPs = {peer.address}"]
