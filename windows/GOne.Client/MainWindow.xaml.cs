@@ -10,14 +10,14 @@ namespace GOne.Client;
 public partial class MainWindow : Window
 {
     private HttpClient? client;
+    private string? accessToken; // Deliberately memory-only; never persisted.
     private readonly DispatcherTimer policyTimer = new();
-    private readonly ClientSettings settings;
+    private ClientSettings? settings;
 
     public MainWindow()
     {
         InitializeComponent();
-        settings = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "clientsettings.json")))
-            ?? throw new InvalidDataException("clientsettings.json is invalid");
+        settings = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "clientsettings.json")));
         policyTimer.Interval = TimeSpan.FromSeconds(15);
         policyTimer.Tick += async (_, _) => await SynchronizePolicy();
     }
@@ -29,7 +29,7 @@ public partial class MainWindow : Window
         try
         {
             client?.Dispose();
-            client = new HttpClient { BaseAddress = new Uri(settings.serverUrl.TrimEnd('/') + "/") };
+            client = new HttpClient { BaseAddress = new Uri(settings!.serverUrl.TrimEnd('/') + "/") };
             var response = await client.PostAsJsonAsync("api/v1/session/login", new { subject = SubjectBox.Text, tenant_id = settings.workspace, password = PasswordBox.Password });
             response.EnsureSuccessStatusCode();
             var accessToken = (await response.Content.ReadFromJsonAsync<SessionToken>())!.access_token;
@@ -49,6 +49,7 @@ public partial class MainWindow : Window
     private void Logout_Click(object sender, RoutedEventArgs e)
     {
         policyTimer.Stop();
+        accessToken = null;
         client?.Dispose(); client = null;
         DevicesList.ItemsSource = null;
         DashboardPanel.Visibility = Visibility.Collapsed;
@@ -76,7 +77,7 @@ public partial class MainWindow : Window
         catch (Exception ex) { ConnectionText.Text = $"● 동기화 재시도 예정: {ex.Message}"; }
     }
 
-    protected override void OnClosed(EventArgs e) { policyTimer.Stop(); client?.Dispose(); base.OnClosed(e); }
+    protected override void OnClosed(EventArgs e) { policyTimer.Stop(); accessToken = null; client?.Dispose(); base.OnClosed(e); }
     private sealed record SessionToken(string access_token);
     private sealed record Principal(string subject, string tenant_id, string[] roles);
     private sealed record ClientSettings(string serverUrl, string workspace);
