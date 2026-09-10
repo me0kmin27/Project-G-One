@@ -4,10 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import os
 from pathlib import Path
 import secrets
-import base64
 import tempfile
 
 
