@@ -1,15 +1,16 @@
 const $=(selector,root=document)=>root.querySelector(selector);
 const $$=(selector,root=document)=>[...root.querySelectorAll(selector)];
-const state={token:sessionStorage.getItem('g-one-token')||'',me:null,devices:[],support:[],audit:[],vpn:null,peers:[],workspace:null,users:[],tokens:[],roles:[]};
+const state={token:sessionStorage.getItem('g-one-token')||'',setupRequired:null,me:null,devices:[],support:[],audit:[],vpn:null,peers:[],workspace:null,users:[],tokens:[],roles:[]};
 const labels={overview:'개요',workspace:'워크스페이스 관리',users:'사용자 관리',tokens:'토큰 관리',roles:'권한 관리',devices:'장치',vpn:'WireGuard 관리',support:'원격 지원',audit:'감사 로그'};
 
+class ApiError extends Error{constructor(message,status){super(message);this.status=status;}}
 async function api(path,options={}){
   const headers={'Content-Type':'application/json',...(options.headers||{})};
   if(state.token) headers.Authorization=`Bearer ${state.token}`;
   const response=await fetch(path,{...options,headers});
   if(response.status===204)return null;
   const data=await response.json().catch(()=>({detail:'서버 응답을 읽을 수 없습니다.'}));
-  if(!response.ok)throw new Error(typeof data.detail==='string'?data.detail:'요청을 처리하지 못했습니다.');
+  if(!response.ok)throw new ApiError(typeof data.detail==='string'?data.detail:'요청을 처리하지 못했습니다.',response.status);
   return data;
 }
 function escapeHtml(value){return String(value).replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));}
@@ -71,13 +72,15 @@ async function connect(){
   try{
     state.me=await api('/api/v1/me');sessionStorage.setItem('g-one-token',state.token);
     $('#workspaceName').textContent=state.me.tenant_id;$('#accountName').textContent=state.me.subject;$('#greetingName').textContent=state.me.subject;$('#avatar').textContent=state.me.subject[0].toUpperCase();$('#accountRole').textContent=state.me.roles.join(' · ');
-    $('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');await loadData();
+    $('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');
+    try{state.workspace=await api('/api/v1/workspace');$('#workspaceName').textContent=state.workspace.name;await loadData();}
+    catch(error){if(error.status!==404)throw error;$('#setupWorkspaceId').value=state.me.tenant_id;$('#setupWorkspaceName').value='';$('#workspaceSetupDialog').showModal();}
   }catch(error){state.token='';sessionStorage.removeItem('g-one-token');$('#loginError').textContent=`연결 실패: ${error.message}`;$('#loginView').classList.remove('hidden');$('#appView').classList.add('hidden');}
 }
 function go(page){$$('.page').forEach(el=>el.classList.toggle('hidden',el.dataset.view!==page));$$('.nav').forEach(el=>el.classList.toggle('active',el.dataset.page===page));$('#pageTitle').textContent=labels[page];$('#sidebar').classList.remove('open');if(page==='audit')loadAudit();if(page==='vpn')loadVpn();if(['workspace','users','tokens','roles'].includes(page))loadManagement();}
 async function loadAudit(){try{state.audit=await api('/api/v1/audit-events');$('#auditTable').innerHTML=state.audit.length?`<table class="data-table"><thead><tr><th>작업</th><th>행위자</th><th>대상</th><th>결과</th><th>시각</th></tr></thead><tbody>${state.audit.map(e=>`<tr><td><strong>${escapeHtml(e.action)}</strong></td><td>${escapeHtml(e.actor_id)}</td><td>${escapeHtml(e.target_type)} · ${escapeHtml(e.target_id.slice(0,8))}</td><td>${escapeHtml(e.outcome)}</td><td>${date(e.occurred_at)}</td></tr>`).join('')}</tbody></table>`:empty('감사 이벤트가 없습니다.');}catch(error){$('#auditTable').innerHTML=empty(`조회할 수 없습니다: ${error.message}`);}}
 
-$('#loginForm').addEventListener('submit',async e=>{e.preventDefault();$('#loginError').textContent='';const button=e.submitter;setBusy(button,true,'연결하는 중…');try{const result=await api('/api/v1/session/console',{method:'POST',body:JSON.stringify({subject:$('#subject').value,tenant_id:$('#tenant').value,password:$('#consolePassword').value})});state.token=result.access_token;await connect();}catch(error){$('#loginError').textContent=`로그인 실패: ${error.message}`;}finally{setBusy(button,false);}});
+$('#loginForm').addEventListener('submit',async e=>{e.preventDefault();if(state.setupRequired===null)return;$('#loginError').textContent='';const button=e.submitter;setBusy(button,true,state.setupRequired?'설정하는 중…':'연결하는 중…');try{const body={subject:$('#subject').value,tenant_id:$('#tenant').value,password:$('#consolePassword').value};if(state.setupRequired)body.display_name=$('#displayName').value;const endpoint=state.setupRequired?'/api/v1/setup/administrator':'/api/v1/session/login';const result=await api(endpoint,{method:'POST',body:JSON.stringify(body)});state.setupRequired=false;state.token=result.access_token;await connect();}catch(error){$('#loginError').textContent=`로그인 실패: ${error.message}`;if(error.status===409)await initializeLogin();}finally{setBusy(button,false);}});
 $('#tokenToggle').onclick=()=>$('#tokenForm').classList.toggle('hidden');$('#tokenForm').addEventListener('submit',async e=>{e.preventDefault();state.token=$('#accessToken').value.trim();await connect();});
 $('#passwordToggle').onclick=()=>{const input=$('#consolePassword');const visible=input.type==='text';input.type=visible?'password':'text';$('#passwordToggle').textContent=visible?'보기':'숨김';$('#passwordToggle').setAttribute('aria-label',visible?'암호 표시':'암호 숨기기');};
 $('#logout').onclick=()=>{sessionStorage.removeItem('g-one-token');location.reload();};$('#menuButton').onclick=()=>$('#sidebar').classList.toggle('open');$('#sidebarBackdrop').onclick=()=>$('#sidebar').classList.remove('open');$$('.nav').forEach(el=>el.onclick=()=>go(el.dataset.page));$$('[data-go]').forEach(el=>el.onclick=()=>go(el.dataset.go));
@@ -89,6 +92,7 @@ $('#deviceSearch').addEventListener('input',renderDeviceTable);
 $('#addUser').onclick=()=>$('#userDialog').showModal();
 $('#addToken').onclick=()=>$('#tokenDialog').showModal();
 $('#workspaceForm').addEventListener('submit',async event=>{event.preventDefault();try{await api('/api/v1/workspace',{method:'PUT',body:JSON.stringify({name:$('#workspaceDisplayName').value})});toast('워크스페이스를 저장했습니다.');await loadManagement();}catch(error){showError(error);}});
+$('#workspaceSetupForm').addEventListener('submit',async event=>{event.preventDefault();const button=event.submitter;$('#setupError').textContent='';setBusy(button,true,'생성하는 중…');try{state.workspace=await api('/api/v1/workspace',{method:'PUT',body:JSON.stringify({name:$('#setupWorkspaceName').value})});$('#workspaceName').textContent=state.workspace.name;$('#workspaceSetupDialog').close();toast('워크스페이스를 생성했습니다.');await loadData();}catch(error){$('#setupError').textContent=error.message;}finally{setBusy(button,false);}});
 $('#userForm').addEventListener('submit',async event=>{event.preventDefault();const roles=$$('input[name="userRole"]:checked').map(el=>el.value);try{await api('/api/v1/users',{method:'POST',body:JSON.stringify({subject:$('#userSubject').value,display_name:$('#userName').value,password:$('#userPassword').value,email:$('#userEmail').value||null,vpn_address:$('#userVpnAddress').value||null,allowed_ips:$('#userAllowedIps').value,roles})});event.target.reset();$('#userDialog').close();toast('사용자를 등록했습니다.');await loadManagement();}catch(error){showError(error);}});
 $('#tokenCreateForm').addEventListener('submit',async event=>{event.preventDefault();const scopes=$$('input[name="tokenScope"]:checked').map(el=>el.value);if(!scopes.length)return toast('범위를 하나 이상 선택하세요.');try{const issued=await api('/api/v1/tokens',{method:'POST',body:JSON.stringify({name:$('#tokenName').value,scopes,lifetime_days:Number($('#tokenDays').value)})});event.target.reset();$('#tokenDialog').close();$('#issuedToken').value=issued.token;$('#issuedTokenDialog').showModal();await loadManagement();}catch(error){showError(error);}});
 $('#tokensTable').addEventListener('click',async event=>{const id=event.target.dataset.revokeToken;if(!id||!confirm('이 토큰을 즉시 회수할까요?'))return;try{await api(`/api/v1/tokens/${id}`,{method:'DELETE'});toast('토큰을 회수했습니다.');await loadManagement();}catch(error){showError(error);}});
@@ -103,7 +107,10 @@ $$('.vpn-tab').forEach(tab=>tab.onclick=()=>{$$('.vpn-tab').forEach(item=>item.c
 $('#routesTable').addEventListener('click',event=>{const peer=state.peers.find(item=>item.id===event.target.dataset.editRoutes);if(!peer)return;$('#routePeerId').value=peer.id;$('#routePeerName').textContent=peer.name;$('#routeAllowedIps').value=peer.allowed_ips;$('#routeDialog').showModal();});
 $$('[data-route-preset]').forEach(button=>button.onclick=()=>{$('#routeAllowedIps').value=button.dataset.routePreset==='full'?'0.0.0.0/0, ::/0':state.vpn.network_route;});
 $('#routeForm').addEventListener('submit',async event=>{event.preventDefault();try{await api(`/api/v1/vpn/peers/${$('#routePeerId').value}/routes`,{method:'PUT',body:JSON.stringify({allowed_ips:$('#routeAllowedIps').value})});$('#routeDialog').close();toast('라우팅 정책을 저장했습니다.');await loadVpn();}catch(error){showError(error);}});
-$$('dialog').forEach(dialog=>dialog.addEventListener('click',event=>{if(event.target===dialog)dialog.close();}));
+$$('dialog').forEach(dialog=>dialog.addEventListener('click',event=>{if(event.target===dialog&&!dialog.classList.contains('setup-dialog'))dialog.close();}));
+$('#workspaceSetupDialog').addEventListener('cancel',event=>event.preventDefault());
 document.addEventListener('keydown',event=>{if(event.key==='Escape')$('#sidebar').classList.remove('open');});
 $('#currentDate').textContent=new Intl.DateTimeFormat('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'short'}).format(new Date());
+async function initializeLogin(){try{const status=await api('/api/v1/setup/status');state.setupRequired=status.administrator_required;$('#loginTitle').textContent=state.setupRequired?'관리자 계정 설정':'관리 콘솔에 로그인';$('#loginGuide').textContent=state.setupRequired?'최초 관리자 정보를 설정한 뒤 워크스페이스를 생성하세요.':'관리자가 발급한 계정과 워크스페이스 정보를 입력하세요.';$('#displayNameField').classList.toggle('hidden',!state.setupRequired);$('#displayName').required=state.setupRequired;$('#loginSubmit').disabled=false;}catch(error){$('#loginError').textContent=`초기화 상태를 확인하지 못했습니다: ${error.message}`;}}
+initializeLogin();
 if(state.token)connect();

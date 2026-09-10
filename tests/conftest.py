@@ -48,8 +48,13 @@ def client(tmp_path):
 
 
 @pytest.fixture
-def auth():
-    return lambda subject, tenant, roles=None: {
-        "Authorization": f"Bearer {token(subject, tenant, roles)}"
-    }
+def auth(client):
+    def provisioned_headers(subject, tenant, roles=None):
+        administrator = {"Authorization": f"Bearer {token('__test_admin__', tenant, ['tenant_admin'])}"}
+        response = client.get("/api/v1/workspace", headers=administrator)
+        if response.status_code == 404:
+            response = client.put("/api/v1/workspace", json={"name": tenant}, headers=administrator)
+        assert response.status_code == 200
+        return {"Authorization": f"Bearer {token(subject, tenant, roles)}"}
 
+    return provisioned_headers

@@ -4,16 +4,18 @@ import hashlib
 import ipaddress
 import secrets
 import subprocess
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Request, status
-from sqlalchemy import select, text
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from .auth import CurrentPrincipal, Principal, encode_token
 from .db import DatabaseSession
-from .models import ApiToken, AuditEvent, Device, SupportRequest, VpnNetwork, VpnPeer, Workspace, WorkspaceUser
+from .models import ApiToken, AuditEvent, Device, InstallationState, SupportRequest, VpnNetwork, VpnPeer, Workspace, WorkspaceUser
 from .passwords import hash_password, verify_password
 from .schemas import (
+    AdministratorSetup,
     AuditEventRead,
     ApiTokenCreate,
     ApiTokenIssued,
@@ -24,6 +26,7 @@ from .schemas import (
     DeviceRead,
     PrincipalRead,
     SessionToken,
+    SetupStatus,
     RoleRead,
     SupportDecision,
     SupportRequestCreate,
@@ -64,35 +67,97 @@ TOKEN_SCOPES = {"devices:read", "devices:write", "vpn:read", "support:read", "au
 
 
 @router.post("/api/v1/session/console", response_model=SessionToken)
-def create_console_session(body: ConsoleSessionCreate, request: Request) -> SessionToken:
+def create_console_session(
+    body: ConsoleSessionCreate, request: Request, session: DatabaseSession
+) -> SessionToken:
     settings = request.app.state.settings
     if not hmac.compare_digest(body.password, settings.console_password):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid console credentials")
-    principal = Principal(
-        body.subject,
-        body.tenant_id,
-        frozenset({"tenant_admin", "support", "auditor"}),
+    user = session.scalar(
+        select(WorkspaceUser).where(
+            WorkspaceUser.tenant_id == body.tenant_id,
+            WorkspaceUser.subject == body.subject,
+            WorkspaceUser.status == "active",
+        )
     )
+    if user is None or "tenant_admin" not in user.roles:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "provisioned administrator required")
+    principal = Principal(user.subject, user.tenant_id, frozenset(user.roles))
     return SessionToken(access_token=encode_token(principal, settings))
+
+
+@router.get("/api/v1/setup/status", response_model=SetupStatus)
+def read_setup_status(session: DatabaseSession) -> SetupStatus:
+    state = session.get(InstallationState, 1)
+    return SetupStatus(administrator_required=state is None or not state.initialized)
+
+
+@router.post("/api/v1/setup/administrator", response_model=SessionToken, status_code=status.HTTP_201_CREATED)
+def create_initial_administrator(
+    body: AdministratorSetup, request: Request, session: DatabaseSession
+) -> SessionToken:
+    claimed = session.execute(
+        update(InstallationState)
+        .where(InstallationState.id == 1, InstallationState.initialized.is_(False))
+        .values(initialized=True)
+    )
+    if claimed.rowcount != 1:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "administrator has already been configured")
+
+    user = WorkspaceUser(
+        tenant_id=body.tenant_id,
+        subject=body.subject,
+        display_name=body.display_name,
+        password_hash=hash_password(body.password),
+        roles=["tenant_admin"],
+    )
+    session.add(user)
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "administrator account already exists") from exc
+    principal = Principal(user.subject, user.tenant_id, frozenset(user.roles))
+    audit(session, principal, "installation.admin_created", "user", user.id)
+    session.commit()
+    return SessionToken(access_token=encode_token(principal, request.app.state.settings))
 
 
 @router.post("/api/v1/session/login", response_model=SessionToken)
 def create_user_session(
     body: UserSessionCreate, request: Request, session: DatabaseSession
 ) -> SessionToken:
+    subject = body.subject.strip()
+    tenant_id = body.tenant_id.strip()
     user = session.scalar(
         select(WorkspaceUser).where(
-            WorkspaceUser.tenant_id == body.tenant_id.strip(),
-            WorkspaceUser.subject == body.subject.strip(),
+            WorkspaceUser.tenant_id == tenant_id,
+            WorkspaceUser.subject == subject,
             WorkspaceUser.status == "active",
         )
     )
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid account credentials")
     principal = Principal(user.subject, user.tenant_id, frozenset(user.roles))
+    workspace = session.get(Workspace, user.tenant_id)
+    if workspace is None and "tenant_admin" not in user.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "workspace has not been created")
     audit(session, principal, "session.login", "user", user.id)
     session.commit()
     return SessionToken(access_token=encode_token(principal, request.app.state.settings))
+
+
+def require_provisioned_workspace(
+    principal: CurrentPrincipal, session: DatabaseSession
+) -> Principal:
+    workspace = session.get(Workspace, principal.tenant_id)
+    if workspace is None or workspace.status != "active":
+        raise HTTPException(status.HTTP_409_CONFLICT, "active workspace required")
+    return principal
+
+
+ProvisionedPrincipal = Annotated[Principal, Depends(require_provisioned_workspace)]
 
 
 @router.get("/api/v1/me", response_model=PrincipalRead)
@@ -134,9 +199,7 @@ def read_workspace(principal: CurrentPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin")
     workspace = session.get(Workspace, principal.tenant_id)
     if workspace is None:
-        workspace = Workspace(id=principal.tenant_id, name=principal.tenant_id)
-        session.add(workspace)
-        session.commit()
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "workspace has not been created")
     return workspace
 
 
@@ -156,19 +219,19 @@ def update_workspace(body: WorkspaceUpdate, principal: CurrentPrincipal, session
 
 
 @router.get("/api/v1/roles", response_model=list[RoleRead])
-def list_roles(principal: CurrentPrincipal):
+def list_roles(principal: ProvisionedPrincipal):
     principal.require_role("tenant_admin")
     return [RoleRead(id=key, name=value[0], permissions=value[1]) for key, value in ROLES.items()]
 
 
 @router.get("/api/v1/users", response_model=list[UserRead])
-def list_users(principal: CurrentPrincipal, session: DatabaseSession):
+def list_users(principal: ProvisionedPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin")
     return session.scalars(select(WorkspaceUser).where(WorkspaceUser.tenant_id == principal.tenant_id).order_by(WorkspaceUser.created_at)).all()
 
 
 @router.post("/api/v1/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
-def create_user(body: UserCreate, principal: CurrentPrincipal, session: DatabaseSession):
+def create_user(body: UserCreate, principal: ProvisionedPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin")
     network = session.scalar(select(VpnNetwork).where(VpnNetwork.tenant_id == principal.tenant_id))
     try:
@@ -189,7 +252,7 @@ def create_user(body: UserCreate, principal: CurrentPrincipal, session: Database
 
 
 @router.put("/api/v1/users/{user_id}", response_model=UserRead)
-def update_user(user_id: str, body: UserUpdate, principal: CurrentPrincipal, session: DatabaseSession):
+def update_user(user_id: str, body: UserUpdate, principal: ProvisionedPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin")
     user = session.scalar(select(WorkspaceUser).where(WorkspaceUser.id == user_id, WorkspaceUser.tenant_id == principal.tenant_id))
     if user is None:
@@ -211,7 +274,7 @@ def update_user(user_id: str, body: UserUpdate, principal: CurrentPrincipal, ses
 
 
 @router.get("/api/v1/client/policy", response_model=ClientPolicy)
-def read_client_policy(request: Request, principal: CurrentPrincipal, session: DatabaseSession):
+def read_client_policy(request: Request, principal: ProvisionedPrincipal, session: DatabaseSession):
     user = session.scalar(select(WorkspaceUser).where(WorkspaceUser.tenant_id == principal.tenant_id, WorkspaceUser.subject == principal.subject, WorkspaceUser.status == "active"))
     if user is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "active provisioned account required")
@@ -226,13 +289,13 @@ def read_client_policy(request: Request, principal: CurrentPrincipal, session: D
 
 
 @router.get("/api/v1/tokens", response_model=list[ApiTokenRead])
-def list_tokens(principal: CurrentPrincipal, session: DatabaseSession):
+def list_tokens(principal: ProvisionedPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin")
     return session.scalars(select(ApiToken).where(ApiToken.tenant_id == principal.tenant_id).order_by(ApiToken.created_at.desc())).all()
 
 
 @router.post("/api/v1/tokens", response_model=ApiTokenIssued, status_code=status.HTTP_201_CREATED)
-def create_api_token(body: ApiTokenCreate, principal: CurrentPrincipal, session: DatabaseSession):
+def create_api_token(body: ApiTokenCreate, principal: ProvisionedPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin")
     unknown = body.scopes - TOKEN_SCOPES
     if unknown:
@@ -248,7 +311,7 @@ def create_api_token(body: ApiTokenCreate, principal: CurrentPrincipal, session:
 
 
 @router.delete("/api/v1/tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
-def revoke_api_token(token_id: str, principal: CurrentPrincipal, session: DatabaseSession):
+def revoke_api_token(token_id: str, principal: ProvisionedPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin")
     token = session.scalar(select(ApiToken).where(ApiToken.id == token_id, ApiToken.tenant_id == principal.tenant_id))
     if token is None:
@@ -271,7 +334,7 @@ def ready(session: DatabaseSession) -> dict[str, str]:
 
 
 @router.post("/api/v1/devices", response_model=DeviceRead, status_code=status.HTTP_201_CREATED)
-def create_device(body: DeviceCreate, principal: CurrentPrincipal, session: DatabaseSession):
+def create_device(body: DeviceCreate, principal: ProvisionedPrincipal, session: DatabaseSession):
     device = Device(tenant_id=principal.tenant_id, owner_id=principal.subject, name=body.name)
     session.add(device)
     session.flush()
@@ -281,7 +344,7 @@ def create_device(body: DeviceCreate, principal: CurrentPrincipal, session: Data
 
 
 @router.get("/api/v1/devices", response_model=list[DeviceRead])
-def list_devices(principal: CurrentPrincipal, session: DatabaseSession):
+def list_devices(principal: ProvisionedPrincipal, session: DatabaseSession):
     statement = select(Device).where(Device.tenant_id == principal.tenant_id)
     if principal.roles.isdisjoint({"tenant_admin", "support"}):
         statement = statement.where(Device.owner_id == principal.subject)
@@ -289,7 +352,7 @@ def list_devices(principal: CurrentPrincipal, session: DatabaseSession):
 
 
 @router.delete("/api/v1/devices/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
-def revoke_device(device_id: str, principal: CurrentPrincipal, session: DatabaseSession) -> None:
+def revoke_device(device_id: str, principal: ProvisionedPrincipal, session: DatabaseSession) -> None:
     device = session.scalar(
         select(Device).where(Device.tenant_id == principal.tenant_id, Device.id == device_id)
     )
@@ -310,7 +373,7 @@ def revoke_device(device_id: str, principal: CurrentPrincipal, session: Database
     status_code=status.HTTP_201_CREATED,
 )
 def create_support_request(
-    body: SupportRequestCreate, principal: CurrentPrincipal, session: DatabaseSession
+    body: SupportRequestCreate, principal: ProvisionedPrincipal, session: DatabaseSession
 ):
     principal.require_role("support", "tenant_admin")
     device = session.scalar(
@@ -345,7 +408,7 @@ def create_support_request(
 
 
 @router.get("/api/v1/support-requests", response_model=list[SupportRequestRead])
-def list_support_requests(principal: CurrentPrincipal, session: DatabaseSession):
+def list_support_requests(principal: ProvisionedPrincipal, session: DatabaseSession):
     statement = select(SupportRequest).where(SupportRequest.tenant_id == principal.tenant_id)
     if principal.roles.isdisjoint({"tenant_admin", "support"}):
         owned_device_ids = select(Device.id).where(
@@ -371,7 +434,7 @@ def get_support_request(session, tenant_id: str, request_id: str) -> SupportRequ
 def decide_support_request(
     request_id: str,
     body: SupportDecision,
-    principal: CurrentPrincipal,
+    principal: ProvisionedPrincipal,
     session: DatabaseSession,
 ):
     request = get_support_request(session, principal.tenant_id, request_id)
@@ -397,7 +460,7 @@ def decide_support_request(
 
 
 @router.post("/api/v1/support-requests/{request_id}/end", response_model=SupportRequestRead)
-def end_support_request(request_id: str, principal: CurrentPrincipal, session: DatabaseSession):
+def end_support_request(request_id: str, principal: ProvisionedPrincipal, session: DatabaseSession):
     request = get_support_request(session, principal.tenant_id, request_id)
     device = session.scalar(
         select(Device).where(
@@ -417,7 +480,7 @@ def end_support_request(request_id: str, principal: CurrentPrincipal, session: D
 
 
 @router.get("/api/v1/audit-events", response_model=list[AuditEventRead])
-def list_audit_events(principal: CurrentPrincipal, session: DatabaseSession):
+def list_audit_events(principal: ProvisionedPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin", "auditor")
     return session.scalars(
         select(AuditEvent)
@@ -468,7 +531,7 @@ def sync_vpn(session, network: VpnNetwork, request: Request) -> None:
 def configure_vpn_network(
     body: VpnNetworkCreate,
     request: Request,
-    principal: CurrentPrincipal,
+    principal: ProvisionedPrincipal,
     session: DatabaseSession,
 ):
     principal.require_role("tenant_admin")
@@ -496,12 +559,12 @@ def configure_vpn_network(
 
 
 @router.get("/api/v1/vpn/network", response_model=VpnNetworkRead)
-def read_vpn_network(request: Request, principal: CurrentPrincipal, session: DatabaseSession):
+def read_vpn_network(request: Request, principal: ProvisionedPrincipal, session: DatabaseSession):
     return network_response(get_vpn_network(session, principal.tenant_id), request)
 
 
 @router.get("/api/v1/vpn/peers", response_model=list[VpnPeerRead])
-def list_vpn_peers(principal: CurrentPrincipal, session: DatabaseSession):
+def list_vpn_peers(principal: ProvisionedPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin", "support")
     return session.scalars(
         select(VpnPeer)
@@ -518,7 +581,7 @@ def list_vpn_peers(principal: CurrentPrincipal, session: DatabaseSession):
 def create_vpn_peer(
     body: VpnPeerCreate,
     request: Request,
-    principal: CurrentPrincipal,
+    principal: ProvisionedPrincipal,
     session: DatabaseSession,
 ):
     principal.require_role("tenant_admin")
@@ -564,7 +627,7 @@ def update_vpn_peer_routes(
     peer_id: str,
     body: VpnPeerRoutesUpdate,
     request: Request,
-    principal: CurrentPrincipal,
+    principal: ProvisionedPrincipal,
     session: DatabaseSession,
 ):
     principal.require_role("tenant_admin")
@@ -595,7 +658,7 @@ def update_vpn_peer_routes(
 def revoke_vpn_peer(
     peer_id: str,
     request: Request,
-    principal: CurrentPrincipal,
+    principal: ProvisionedPrincipal,
     session: DatabaseSession,
 ):
     principal.require_role("tenant_admin")

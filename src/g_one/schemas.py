@@ -32,10 +32,32 @@ class UserSessionCreate(ApiModel):
     tenant_id: str = Field(min_length=1, max_length=128)
     password: str = Field(min_length=8, max_length=512)
 
+    @field_validator("subject", "tenant_id")
+    @classmethod
+    def normalize_login_identifier(cls, value: str) -> str:
+        if not (normalized := value.strip()):
+            raise ValueError("identifier cannot be blank")
+        return normalized
+
+
+class AdministratorSetup(UserSessionCreate):
+    display_name: str = Field(min_length=1, max_length=128)
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_display_name(cls, value: str) -> str:
+        if not (normalized := value.strip()):
+            raise ValueError("display name cannot be blank")
+        return normalized
+
 
 class SessionToken(ApiModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class SetupStatus(ApiModel):
+    administrator_required: bool
 
 
 class WorkspaceUpdate(ApiModel):

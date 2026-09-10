@@ -12,6 +12,7 @@ EXPECTED_TABLES = {
     "api_tokens",
     "audit_events",
     "devices",
+    "installation_state",
     "support_requests",
     "vpn_networks",
     "vpn_peers",
