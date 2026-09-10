@@ -12,14 +12,19 @@ def test_admin_console_is_served(client):
     assert client.get("/assets/app.js").status_code == 200
 
 
-def test_first_login_creates_only_the_administrator_then_requires_a_workspace(client):
+def test_first_run_creates_only_the_administrator_then_requires_a_workspace(client):
     assert client.get("/api/v1/setup/status").json() == {"administrator_required": True}
 
-    response = client.post(
+    assert client.post(
         "/api/v1/session/login",
         json={"subject": "owner", "tenant_id": "acme", "password": "correct-horse"},
+    ).status_code == 401
+
+    response = client.post(
+        "/api/v1/setup/administrator",
+        json={"subject": "owner", "tenant_id": "acme", "password": "correct-horse", "display_name": "Owner"},
     )
-    assert response.status_code == 200
+    assert response.status_code == 201
     headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
     assert client.get("/api/v1/me", headers=headers).json()["roles"] == ["tenant_admin"]
     assert client.get("/api/v1/setup/status").json() == {"administrator_required": False}
@@ -28,6 +33,9 @@ def test_first_login_creates_only_the_administrator_then_requires_a_workspace(cl
         "/api/v1/users",
         json={"subject": "alice", "display_name": "Alice", "password": "correct-horse"},
         headers=headers,
+    ).status_code == 409
+    assert client.post(
+        "/api/v1/devices", json={"name": "Too Early"}, headers=headers
     ).status_code == 409
 
     workspace = client.put(
@@ -39,22 +47,22 @@ def test_first_login_creates_only_the_administrator_then_requires_a_workspace(cl
 
 def test_later_login_cannot_claim_an_administrator_account(client):
     client.post(
-        "/api/v1/session/login",
-        json={"subject": "owner", "tenant_id": "acme", "password": "correct-horse"},
+        "/api/v1/setup/administrator",
+        json={"subject": "owner", "tenant_id": "acme", "password": "correct-horse", "display_name": "Owner"},
     )
     response = client.post(
-        "/api/v1/session/login",
-        json={"subject": "attacker", "tenant_id": "other", "password": "another-password"},
+        "/api/v1/setup/administrator",
+        json={"subject": "attacker", "tenant_id": "other", "password": "another-password", "display_name": "Attacker"},
     )
-    assert response.status_code == 401
+    assert response.status_code == 409
 
 
 def test_console_password_only_impersonates_a_provisioned_administrator(client):
     login = client.post(
-        "/api/v1/session/login",
-        json={"subject": "owner", "tenant_id": "acme", "password": "correct-horse"},
+        "/api/v1/setup/administrator",
+        json={"subject": "owner", "tenant_id": "acme", "password": "correct-horse", "display_name": "Owner"},
     )
-    assert login.status_code == 200
+    assert login.status_code == 201
     response = client.post(
         "/api/v1/session/console",
         json={

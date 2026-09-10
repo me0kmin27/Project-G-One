@@ -28,10 +28,11 @@
       <h1 id="loginTitle">관리 콘솔에 로그인</h1>
       <p id="loginGuide" class="muted">관리자가 발급한 계정과 워크스페이스 정보를 입력하세요.</p>
       <form id="loginForm">
+        <label id="displayNameField" class="hidden">관리자 이름<span class="input-wrap"><i aria-hidden="true">A</i><input id="displayName" maxlength="128" autocomplete="name"></span></label>
         <label>사용자 ID<span class="input-wrap"><i aria-hidden="true">@</i><input id="subject" value="admin" required maxlength="128" autocomplete="username"></span></label>
         <label>워크스페이스<span class="input-wrap"><i aria-hidden="true">◇</i><input id="tenant" value="demo" required maxlength="128"></span></label>
         <label>계정 암호<span class="input-wrap"><i aria-hidden="true">●</i><input id="consolePassword" type="password" required minlength="8" maxlength="512" autocomplete="current-password"><button id="passwordToggle" class="password-toggle" type="button" aria-label="암호 표시">보기</button></span></label>
-        <button class="btn primary login-submit" type="submit"><span>관리 콘솔 시작</span><b>→</b></button>
+        <button id="loginSubmit" class="btn primary login-submit" type="submit" disabled><span>관리 콘솔 시작</span><b>→</b></button>
       </form>
       <button id="tokenToggle" class="link-btn" type="button">발급된 토큰으로 연결</button>
       <form id="tokenForm" class="hidden"><label>Bearer 액세스 토큰<textarea id="accessToken" rows="4" required></textarea></label><button class="btn secondary" type="submit">토큰 연결</button></form>
