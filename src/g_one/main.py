@@ -4,11 +4,30 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import select
 
 from .api import router
 from .config import Settings
 from .db import configure_database
 from .migrations import upgrade_database
+from .models import VpnNetwork, VpnPeer
+from .wireguard import apply_config, render_server_config
+
+
+def restore_wireguard(session_factory, settings: Settings) -> None:
+    """Rebuild the runtime interface from database state after a container restart."""
+    if not settings.wireguard_private_key:
+        return
+    with session_factory() as session:
+        network = session.scalar(
+            select(VpnNetwork).order_by(VpnNetwork.updated_at.desc()).limit(1)
+        )
+        if network is None:
+            return
+        peers = session.scalars(select(VpnPeer).where(VpnPeer.network_id == network.id)).all()
+        apply_config(
+            render_server_config(network, peers, settings.wireguard_private_key), settings
+        )
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -21,6 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Running this before accepting traffic also keeps a newly deployed API
         # from serving against an older schema.
         upgrade_database(settings.database_url)
+        restore_wireguard(session_factory, settings)
         yield
         engine.dispose()
 

@@ -3,12 +3,32 @@ from types import SimpleNamespace
 
 import pytest
 
+from g_one.config import Settings
+from g_one.main import restore_wireguard
 from g_one.wireguard import (
     generate_keypair,
     normalize_allowed_ips,
     render_client_config,
     render_server_config,
 )
+
+
+class FakeSession:
+    def __init__(self, network, peers):
+        self.network = network
+        self.peers = peers
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return None
+
+    def scalar(self, statement):
+        return self.network
+
+    def scalars(self, statement):
+        return SimpleNamespace(all=lambda: self.peers)
 
 
 def test_generates_wireguard_keypair_and_split_tunnel_config():
@@ -51,6 +71,44 @@ def test_server_config_excludes_revoked_peers():
     config = render_server_config(network, peers, private_key)
     assert active_public_key in config
     assert revoked_public_key not in config
+    assert "PostUp = iptables -A FORWARD -i %i -j ACCEPT" in config
+    assert "iptables -t nat -A POSTROUTING -s 10.44.0.0/24 -j MASQUERADE" in config
+    assert "PostDown = iptables -D FORWARD -i %i -j ACCEPT" in config
+
+
+def test_server_config_does_not_add_ipv4_firewall_rules_to_ipv6_network():
+    private_key, _ = generate_keypair()
+    network = SimpleNamespace(address_cidr="fd42::1/64", listen_port=51820)
+
+    config = render_server_config(network, [], private_key)
+
+    assert "PostUp" not in config
+    assert "iptables" not in config
+
+
+def test_restores_wireguard_configuration_after_restart(monkeypatch):
+    private_key, peer_public_key = generate_keypair()
+    network = SimpleNamespace(
+        id="network-1", address_cidr="10.44.0.1/24", listen_port=51820
+    )
+    peers = [
+        SimpleNamespace(
+            enabled=True,
+            name="fileserver-client",
+            public_key=peer_public_key,
+            address="10.44.0.2/32",
+            persistent_keepalive=25,
+        )
+    ]
+    settings = Settings(wireguard_private_key=private_key, wireguard_apply=True)
+    applied = []
+    monkeypatch.setattr("g_one.main.apply_config", lambda config, value: applied.append(config))
+
+    restore_wireguard(lambda: FakeSession(network, peers), settings)
+
+    assert len(applied) == 1
+    assert "AllowedIPs = 10.44.0.2/32" in applied[0]
+    assert "iptables -t nat -A POSTROUTING -s 10.44.0.0/24" in applied[0]
 
 
 def test_normalizes_client_routes_and_rejects_invalid_values():
