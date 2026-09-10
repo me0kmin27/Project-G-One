@@ -87,7 +87,6 @@ def test_console_rejects_unprovisioned_identity(client):
     )
     assert response.status_code == 401
 
-
 def test_admin_manages_workspace_users_roles_and_tokens(client, auth):
     admin = auth("admin", "acme", ["tenant_admin"])
     workspace = client.put("/api/v1/workspace", json={"name": "ACME Operations"}, headers=admin)

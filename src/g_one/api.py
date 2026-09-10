@@ -137,7 +137,27 @@ def create_user_session(
             WorkspaceUser.status == "active",
         )
     )
+    if user is None:
+        claimed = session.execute(
+            update(InstallationState)
+            .where(InstallationState.id == 1, InstallationState.initialized.is_(False))
+            .values(initialized=True)
+        )
+        if claimed.rowcount == 1:
+            user = WorkspaceUser(
+                tenant_id=tenant_id,
+                subject=subject,
+                display_name=subject,
+                password_hash=hash_password(body.password),
+                roles=["tenant_admin"],
+            )
+            session.add(user)
+            session.flush()
+            principal = Principal(user.subject, user.tenant_id, frozenset(user.roles))
+            audit(session, principal, "installation.admin_created", "user", user.id)
+            session.commit()
     if user is None or not verify_password(body.password, user.password_hash):
+        session.rollback()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid account credentials")
     principal = Principal(user.subject, user.tenant_id, frozenset(user.roles))
     workspace = session.get(Workspace, user.tenant_id)
@@ -233,6 +253,8 @@ def list_users(principal: ProvisionedPrincipal, session: DatabaseSession):
 @router.post("/api/v1/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def create_user(body: UserCreate, principal: ProvisionedPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin")
+    if session.get(Workspace, principal.tenant_id) is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "create the workspace before adding users")
     network = session.scalar(select(VpnNetwork).where(VpnNetwork.tenant_id == principal.tenant_id))
     try:
         vpn_address = address_belongs(network.address_cidr, body.vpn_address) if network and body.vpn_address else None
