@@ -32,6 +32,70 @@ class SessionToken(ApiModel):
     token_type: str = "bearer"
 
 
+class WorkspaceUpdate(ApiModel):
+    name: str = Field(min_length=1, max_length=128)
+
+
+class WorkspaceRead(ApiModel):
+    id: str
+    name: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserCreate(ApiModel):
+    subject: str = Field(min_length=1, max_length=128)
+    display_name: str = Field(min_length=1, max_length=128)
+    email: str | None = Field(default=None, max_length=255)
+    roles: set[str] = Field(default_factory=set)
+
+
+class UserUpdate(ApiModel):
+    display_name: str = Field(min_length=1, max_length=128)
+    email: str | None = Field(default=None, max_length=255)
+    roles: set[str] = Field(default_factory=set)
+    status: str = Field(pattern="^(active|suspended)$")
+
+
+class UserRead(ApiModel):
+    id: str
+    subject: str
+    display_name: str
+    email: str | None
+    roles: list[str]
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class RoleRead(ApiModel):
+    id: str
+    name: str
+    permissions: list[str]
+
+
+class ApiTokenCreate(ApiModel):
+    name: str = Field(min_length=1, max_length=128)
+    scopes: set[str] = Field(min_length=1)
+    lifetime_days: int = Field(default=30, ge=1, le=365)
+
+
+class ApiTokenRead(ApiModel):
+    id: str
+    name: str
+    prefix: str
+    scopes: list[str]
+    created_by: str
+    expires_at: datetime
+    created_at: datetime
+    revoked_at: datetime | None
+
+
+class ApiTokenIssued(ApiTokenRead):
+    token: str
+
+
 class DeviceCreate(ApiModel):
     name: str = Field(min_length=1, max_length=128)
 

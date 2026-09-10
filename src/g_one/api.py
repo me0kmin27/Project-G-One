@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
 import hmac
+import hashlib
 import ipaddress
+import secrets
 import subprocess
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -9,14 +11,18 @@ from sqlalchemy.exc import IntegrityError
 
 from .auth import CurrentPrincipal, Principal, encode_token
 from .db import DatabaseSession
-from .models import AuditEvent, Device, SupportRequest, VpnNetwork, VpnPeer
+from .models import ApiToken, AuditEvent, Device, SupportRequest, VpnNetwork, VpnPeer, Workspace, WorkspaceUser
 from .schemas import (
     AuditEventRead,
+    ApiTokenCreate,
+    ApiTokenIssued,
+    ApiTokenRead,
     ConsoleSessionCreate,
     DeviceCreate,
     DeviceRead,
     PrincipalRead,
     SessionToken,
+    RoleRead,
     SupportDecision,
     SupportRequestCreate,
     SupportRequestRead,
@@ -26,6 +32,11 @@ from .schemas import (
     VpnPeerEnrollment,
     VpnPeerRead,
     VpnPeerRoutesUpdate,
+    UserCreate,
+    UserRead,
+    UserUpdate,
+    WorkspaceRead,
+    WorkspaceUpdate,
 )
 from .wireguard import (
     address_belongs,
@@ -39,6 +50,14 @@ from .wireguard import (
 )
 
 router = APIRouter()
+
+ROLES = {
+    "tenant_admin": ("워크스페이스 관리자", ["workspace.manage", "tokens.manage", "users.manage", "roles.manage", "devices.manage", "vpn.manage", "support.manage", "audit.read"]),
+    "support": ("지원 담당자", ["devices.read", "vpn.read", "support.manage"]),
+    "auditor": ("감사 담당자", ["audit.read"]),
+    "member": ("일반 사용자", ["devices.self", "support.consent"]),
+}
+TOKEN_SCOPES = {"devices:read", "devices:write", "vpn:read", "support:read", "audit:read"}
 
 
 @router.post("/api/v1/session/console", response_model=SessionToken)
@@ -79,6 +98,113 @@ def audit(session, principal, action: str, target_type: str, target_id: str, **d
             details=details,
         )
     )
+
+
+def validate_roles(roles: set[str]) -> list[str]:
+    unknown = roles - ROLES.keys()
+    if unknown:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"unknown roles: {', '.join(sorted(unknown))}")
+    return sorted(roles)
+
+
+@router.get("/api/v1/workspace", response_model=WorkspaceRead)
+def read_workspace(principal: CurrentPrincipal, session: DatabaseSession):
+    principal.require_role("tenant_admin")
+    workspace = session.get(Workspace, principal.tenant_id)
+    if workspace is None:
+        workspace = Workspace(id=principal.tenant_id, name=principal.tenant_id)
+        session.add(workspace)
+        session.commit()
+    return workspace
+
+
+@router.put("/api/v1/workspace", response_model=WorkspaceRead)
+def update_workspace(body: WorkspaceUpdate, principal: CurrentPrincipal, session: DatabaseSession):
+    principal.require_role("tenant_admin")
+    workspace = session.get(Workspace, principal.tenant_id)
+    if workspace is None:
+        workspace = Workspace(id=principal.tenant_id, name=body.name.strip())
+        session.add(workspace)
+    else:
+        workspace.name = body.name.strip()
+        workspace.updated_at = now()
+    audit(session, principal, "workspace.updated", "workspace", principal.tenant_id)
+    session.commit()
+    return workspace
+
+
+@router.get("/api/v1/roles", response_model=list[RoleRead])
+def list_roles(principal: CurrentPrincipal):
+    principal.require_role("tenant_admin")
+    return [RoleRead(id=key, name=value[0], permissions=value[1]) for key, value in ROLES.items()]
+
+
+@router.get("/api/v1/users", response_model=list[UserRead])
+def list_users(principal: CurrentPrincipal, session: DatabaseSession):
+    principal.require_role("tenant_admin")
+    return session.scalars(select(WorkspaceUser).where(WorkspaceUser.tenant_id == principal.tenant_id).order_by(WorkspaceUser.created_at)).all()
+
+
+@router.post("/api/v1/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+def create_user(body: UserCreate, principal: CurrentPrincipal, session: DatabaseSession):
+    principal.require_role("tenant_admin")
+    user = WorkspaceUser(tenant_id=principal.tenant_id, subject=body.subject.strip(), display_name=body.display_name.strip(), email=body.email.strip() if body.email else None, roles=validate_roles(body.roles))
+    session.add(user)
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "user already exists") from exc
+    audit(session, principal, "user.created", "user", user.id, roles=user.roles)
+    session.commit()
+    return user
+
+
+@router.put("/api/v1/users/{user_id}", response_model=UserRead)
+def update_user(user_id: str, body: UserUpdate, principal: CurrentPrincipal, session: DatabaseSession):
+    principal.require_role("tenant_admin")
+    user = session.scalar(select(WorkspaceUser).where(WorkspaceUser.id == user_id, WorkspaceUser.tenant_id == principal.tenant_id))
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
+    user.display_name, user.email = body.display_name.strip(), body.email.strip() if body.email else None
+    user.roles, user.status, user.updated_at = validate_roles(body.roles), body.status, now()
+    audit(session, principal, "user.updated", "user", user.id, roles=user.roles, status=user.status)
+    session.commit()
+    return user
+
+
+@router.get("/api/v1/tokens", response_model=list[ApiTokenRead])
+def list_tokens(principal: CurrentPrincipal, session: DatabaseSession):
+    principal.require_role("tenant_admin")
+    return session.scalars(select(ApiToken).where(ApiToken.tenant_id == principal.tenant_id).order_by(ApiToken.created_at.desc())).all()
+
+
+@router.post("/api/v1/tokens", response_model=ApiTokenIssued, status_code=status.HTTP_201_CREATED)
+def create_api_token(body: ApiTokenCreate, principal: CurrentPrincipal, session: DatabaseSession):
+    principal.require_role("tenant_admin")
+    unknown = body.scopes - TOKEN_SCOPES
+    if unknown:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"unknown scopes: {', '.join(sorted(unknown))}")
+    secret = "gone_" + secrets.token_urlsafe(32)
+    token = ApiToken(tenant_id=principal.tenant_id, name=body.name.strip(), token_hash=hashlib.sha256(secret.encode()).hexdigest(), prefix=secret[:12], scopes=sorted(body.scopes), created_by=principal.subject, expires_at=now() + timedelta(days=body.lifetime_days))
+    session.add(token)
+    session.flush()
+    audit(session, principal, "token.created", "api_token", token.id, scopes=token.scopes)
+    session.commit()
+    public = ApiTokenRead.model_validate(token)
+    return ApiTokenIssued(**public.model_dump(), token=secret)
+
+
+@router.delete("/api/v1/tokens/{token_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_api_token(token_id: str, principal: CurrentPrincipal, session: DatabaseSession):
+    principal.require_role("tenant_admin")
+    token = session.scalar(select(ApiToken).where(ApiToken.id == token_id, ApiToken.tenant_id == principal.tenant_id))
+    if token is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "token not found")
+    if token.revoked_at is None:
+        token.revoked_at = now()
+        audit(session, principal, "token.revoked", "api_token", token.id)
+        session.commit()
 
 
 @router.get("/healthz", include_in_schema=False)
