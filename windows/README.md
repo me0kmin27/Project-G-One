@@ -12,4 +12,12 @@ GitHub Actions의 **Windows client executable** 작업이 Windows x64용 self-co
 
 실행 파일은 `windows\dist\win-x64\GOne.Client.exe`에 생성됩니다. 함께 생성된 `clientsettings.json`의 `serverUrl`과 `workspace`를 배포 환경에 맞게 수정하고 EXE와 같은 폴더에 둡니다.
 
+Release 게시 설정(Windows x64, self-contained, single-file)은 프로젝트 파일에 포함되어 있어
+IDE나 CI에서 아래 표준 명령을 직접 실행해도 같은 EXE를 만들 수 있습니다. 빌드 머신의 운영
+체제와 관계없이 .NET 8 SDK가 필요합니다.
+
+```console
+dotnet publish windows/GOne.Client/GOne.Client.csproj -c Release -o windows/dist/win-x64
+```
+
 현재 수직 슬라이스는 계정 로그인, 자동 장치 등록, 서버 정책 주기 동기화, VPN 주소·라우팅 표시와 명시적 로그아웃 시 메모리 세션 정리를 제공합니다. 실제 WireGuard/SMB 시스템 변경은 권한 분리 Windows Service와 서명된 정책 IPC가 준비된 뒤 연결하며 UI 프로세스에서 관리자 명령을 직접 실행하지 않습니다.
