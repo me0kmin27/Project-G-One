@@ -27,6 +27,12 @@ class ConsoleSessionCreate(ApiModel):
         return normalized
 
 
+class UserSessionCreate(ApiModel):
+    subject: str = Field(min_length=1, max_length=128)
+    tenant_id: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=8, max_length=512)
+
+
 class SessionToken(ApiModel):
     access_token: str
     token_type: str = "bearer"
@@ -48,7 +54,10 @@ class UserCreate(ApiModel):
     subject: str = Field(min_length=1, max_length=128)
     display_name: str = Field(min_length=1, max_length=128)
     email: str | None = Field(default=None, max_length=255)
+    password: str = Field(min_length=8, max_length=512)
     roles: set[str] = Field(default_factory=set)
+    vpn_address: str | None = Field(default=None, max_length=64)
+    allowed_ips: str = Field(default="", max_length=1024)
 
 
 class UserUpdate(ApiModel):
@@ -56,6 +65,9 @@ class UserUpdate(ApiModel):
     email: str | None = Field(default=None, max_length=255)
     roles: set[str] = Field(default_factory=set)
     status: str = Field(pattern="^(active|suspended)$")
+    password: str | None = Field(default=None, min_length=8, max_length=512)
+    vpn_address: str | None = Field(default=None, max_length=64)
+    allowed_ips: str = Field(default="", max_length=1024)
 
 
 class UserRead(ApiModel):
@@ -64,6 +76,9 @@ class UserRead(ApiModel):
     display_name: str
     email: str | None
     roles: list[str]
+    vpn_address: str | None
+    allowed_ips: str
+    policy_version: int
     status: str
     created_at: datetime
     updated_at: datetime
@@ -216,3 +231,11 @@ class VpnPeerRead(ApiModel):
 
 class VpnPeerEnrollment(VpnPeerRead):
     client_config: str | None = None
+
+
+class ClientPolicy(ApiModel):
+    version: int
+    poll_interval_seconds: int = 15
+    user: UserRead
+    vpn: VpnNetworkRead | None
+    devices: list[DeviceRead]

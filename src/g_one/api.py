@@ -12,11 +12,13 @@ from sqlalchemy.exc import IntegrityError
 from .auth import CurrentPrincipal, Principal, encode_token
 from .db import DatabaseSession
 from .models import ApiToken, AuditEvent, Device, SupportRequest, VpnNetwork, VpnPeer, Workspace, WorkspaceUser
+from .passwords import hash_password, verify_password
 from .schemas import (
     AuditEventRead,
     ApiTokenCreate,
     ApiTokenIssued,
     ApiTokenRead,
+    ClientPolicy,
     ConsoleSessionCreate,
     DeviceCreate,
     DeviceRead,
@@ -35,6 +37,7 @@ from .schemas import (
     UserCreate,
     UserRead,
     UserUpdate,
+    UserSessionCreate,
     WorkspaceRead,
     WorkspaceUpdate,
 )
@@ -71,6 +74,25 @@ def create_console_session(body: ConsoleSessionCreate, request: Request) -> Sess
         frozenset({"tenant_admin", "support", "auditor"}),
     )
     return SessionToken(access_token=encode_token(principal, settings))
+
+
+@router.post("/api/v1/session/login", response_model=SessionToken)
+def create_user_session(
+    body: UserSessionCreate, request: Request, session: DatabaseSession
+) -> SessionToken:
+    user = session.scalar(
+        select(WorkspaceUser).where(
+            WorkspaceUser.tenant_id == body.tenant_id.strip(),
+            WorkspaceUser.subject == body.subject.strip(),
+            WorkspaceUser.status == "active",
+        )
+    )
+    if user is None or not verify_password(body.password, user.password_hash):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid account credentials")
+    principal = Principal(user.subject, user.tenant_id, frozenset(user.roles))
+    audit(session, principal, "session.login", "user", user.id)
+    session.commit()
+    return SessionToken(access_token=encode_token(principal, request.app.state.settings))
 
 
 @router.get("/api/v1/me", response_model=PrincipalRead)
@@ -148,7 +170,13 @@ def list_users(principal: CurrentPrincipal, session: DatabaseSession):
 @router.post("/api/v1/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def create_user(body: UserCreate, principal: CurrentPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin")
-    user = WorkspaceUser(tenant_id=principal.tenant_id, subject=body.subject.strip(), display_name=body.display_name.strip(), email=body.email.strip() if body.email else None, roles=validate_roles(body.roles))
+    network = session.scalar(select(VpnNetwork).where(VpnNetwork.tenant_id == principal.tenant_id))
+    try:
+        vpn_address = address_belongs(network.address_cidr, body.vpn_address) if network and body.vpn_address else None
+        allowed_ips = normalize_allowed_ips(body.allowed_ips) if body.allowed_ips else ""
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    user = WorkspaceUser(tenant_id=principal.tenant_id, subject=body.subject.strip(), display_name=body.display_name.strip(), email=body.email.strip() if body.email else None, password_hash=hash_password(body.password), roles=validate_roles(body.roles), vpn_address=vpn_address, allowed_ips=allowed_ips)
     session.add(user)
     try:
         session.flush()
@@ -166,11 +194,35 @@ def update_user(user_id: str, body: UserUpdate, principal: CurrentPrincipal, ses
     user = session.scalar(select(WorkspaceUser).where(WorkspaceUser.id == user_id, WorkspaceUser.tenant_id == principal.tenant_id))
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
+    network = session.scalar(select(VpnNetwork).where(VpnNetwork.tenant_id == principal.tenant_id))
+    try:
+        user.vpn_address = address_belongs(network.address_cidr, body.vpn_address) if network and body.vpn_address else None
+        user.allowed_ips = normalize_allowed_ips(body.allowed_ips) if body.allowed_ips else ""
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     user.display_name, user.email = body.display_name.strip(), body.email.strip() if body.email else None
     user.roles, user.status, user.updated_at = validate_roles(body.roles), body.status, now()
+    user.policy_version += 1
+    if body.password:
+        user.password_hash = hash_password(body.password)
     audit(session, principal, "user.updated", "user", user.id, roles=user.roles, status=user.status)
     session.commit()
     return user
+
+
+@router.get("/api/v1/client/policy", response_model=ClientPolicy)
+def read_client_policy(request: Request, principal: CurrentPrincipal, session: DatabaseSession):
+    user = session.scalar(select(WorkspaceUser).where(WorkspaceUser.tenant_id == principal.tenant_id, WorkspaceUser.subject == principal.subject, WorkspaceUser.status == "active"))
+    if user is None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "active provisioned account required")
+    network = session.scalar(select(VpnNetwork).where(VpnNetwork.tenant_id == principal.tenant_id))
+    devices = session.scalars(select(Device).where(Device.tenant_id == principal.tenant_id, Device.owner_id == principal.subject)).all()
+    return ClientPolicy(
+        version=user.policy_version,
+        user=UserRead.model_validate(user),
+        vpn=network_response(network, request) if network else None,
+        devices=list(devices),
+    )
 
 
 @router.get("/api/v1/tokens", response_model=list[ApiTokenRead])

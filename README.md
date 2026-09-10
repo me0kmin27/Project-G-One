@@ -56,7 +56,7 @@ API 문서는 `http://127.0.0.1:8000/docs`, 상태 확인은 `/healthz`와 `/rea
 `python3 scripts/configure_server.py show`로 마스킹된 설정을 확인한 뒤 서버에서 직접
 `.env`의 값을 확인할 수 있습니다. 콘솔에서 실제 API를 통해 장치 등록·접근 회수, 원격
 지원 요청 및 감사 로그 조회를 수행할 수 있습니다. `tenant_admin`은 워크스페이스 설정,
-사용자 등록·역할 배정, 역할별 권한 조회와 범위 제한 API 토큰의 일회성 발급·회수에도
+사용자 계정·초기 암호·VPN 주소·라우팅 경로 등록, 역할 배정, 역할별 권한 조회와 범위 제한 API 토큰의 일회성 발급·회수에도
 접근할 수 있습니다. 토큰 원문은 발급 응답 외에는 저장하거나 다시 표시하지 않습니다.
 기본 SQLite 파일은 `g-one.db`이며 `G_ONE_DATABASE_URL`로 변경할 수 있습니다. 현재 구현은
 장치 등록·폐기, tenant 범위 조회, 원격 지원 요청·동의·종료 및 감사 조회의 첫 수직
@@ -72,14 +72,16 @@ IP forwarding, 방화벽 및 NAT 정책을 별도로 구성해야 합니다. 이
 
 ### Windows 테스트베드 클라이언트
 
-.NET 8 WPF 클라이언트는 `windows/GOne.Client`에 있습니다. 매 실행 대화형 로그인과
-메모리 전용 세션, 장치 조회 및 명시적 로그아웃을 검증할 수 있습니다.
+.NET 8 WPF 클라이언트는 `windows/GOne.Client`에 있습니다. 배포 시 서버와 워크스페이스를
+미리 지정하므로 사용자는 계정과 암호만 입력합니다. 로그인 뒤 장치를 자동 등록하고 서버가
+제공하는 VPN·라우팅 정책을 15초마다 다시 받아 변경을 반영합니다.
 
 ```powershell
-dotnet run --project .\windows\GOne.Client\GOne.Client.csproj
+.\windows\publish.ps1
 ```
 
-현재 클라이언트는 시스템 권한 경계를 우회하지 않도록 WireGuard/SMB 명령을 직접 실행하지
+`GOne.Client.exe`가 포함된 self-contained Windows x64 패키지는 GitHub Actions artifact로
+제공되며 대상 PC에 .NET 런타임을 별도로 설치할 필요가 없습니다. 현재 클라이언트는 시스템 권한 경계를 우회하지 않도록 WireGuard/SMB 명령을 직접 실행하지
 않습니다. 해당 자동 구성은 서명된 정책과 제한된 IPC를 사용하는 Windows Service 단계에서
 연결해야 합니다. 자세한 빌드 방법과 범위는 `windows/README.md`를 참고하십시오.
 

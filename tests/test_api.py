@@ -44,21 +44,35 @@ def test_admin_manages_workspace_users_roles_and_tokens(client, auth):
     assert workspace.status_code == 200
     assert workspace.json()["id"] == "acme"
     assert client.get("/api/v1/workspace", headers=admin).json()["name"] == "ACME Operations"
+    client.put(
+        "/api/v1/vpn/network",
+        json={"name": "ACME VPN", "address_cidr": "10.77.0.1/24", "endpoint": "vpn.acme.test"},
+        headers=admin,
+    )
 
     roles = client.get("/api/v1/roles", headers=admin).json()
     assert {role["id"] for role in roles} == {"tenant_admin", "support", "auditor", "member"}
     user = client.post(
         "/api/v1/users",
-        json={"subject": "alice", "display_name": "Alice", "email": "alice@example.com", "roles": ["support"]},
+        json={"subject": "alice", "display_name": "Alice", "email": "alice@example.com", "password": "correct-horse", "roles": ["support"], "vpn_address": "10.77.0.10/32", "allowed_ips": "10.77.0.0/24, 192.168.10.12/24"},
         headers=admin,
     )
     assert user.status_code == 201
     updated = client.put(
         f"/api/v1/users/{user.json()['id']}",
-        json={"display_name": "Alice Kim", "email": "alice@example.com", "roles": ["auditor", "support"], "status": "active"},
+        json={"display_name": "Alice Kim", "email": "alice@example.com", "roles": ["auditor", "support"], "status": "active", "vpn_address": "10.77.0.10/32", "allowed_ips": "10.77.0.0/24"},
         headers=admin,
     )
     assert updated.json()["roles"] == ["auditor", "support"]
+    login = client.post("/api/v1/session/login", json={"subject": "alice", "tenant_id": "acme", "password": "correct-horse"})
+    assert login.status_code == 200
+    user_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    policy = client.get("/api/v1/client/policy", headers=user_headers)
+    assert policy.status_code == 200
+    assert policy.json()["user"]["subject"] == "alice"
+    assert policy.json()["user"]["vpn_address"] == "10.77.0.10/32"
+    assert policy.json()["user"]["allowed_ips"] == "10.77.0.0/24"
+    assert policy.json()["vpn"]["endpoint"] == "vpn.acme.test"
 
     issued = client.post(
         "/api/v1/tokens",
@@ -79,7 +93,7 @@ def test_management_is_admin_only_and_tenant_scoped(client, auth):
     assert client.get("/api/v1/users", headers=auth("member", "a", ["member"])).status_code == 403
     a = auth("admin-a", "a", ["tenant_admin"])
     b = auth("admin-b", "b", ["tenant_admin"])
-    client.post("/api/v1/users", json={"subject": "alice", "display_name": "Alice", "roles": ["member"]}, headers=a)
+    client.post("/api/v1/users", json={"subject": "alice", "display_name": "Alice", "password": "correct-horse", "roles": ["member"]}, headers=a)
     assert len(client.get("/api/v1/users", headers=a).json()) == 1
     assert client.get("/api/v1/users", headers=b).json() == []
 
