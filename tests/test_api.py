@@ -130,3 +130,61 @@ def test_support_request_list_is_tenant_and_owner_scoped(client, auth):
     assert client.get(
         "/api/v1/support-requests", headers=auth("admin", "tenant-b", ["tenant_admin"])
     ).json() == []
+
+
+def test_admin_can_configure_vpn_and_manage_peer(client, auth):
+    admin = auth("admin", "tenant-a", ["tenant_admin"])
+    configured = client.put(
+        "/api/v1/vpn/network",
+        json={
+            "name": "Office VPN",
+            "address_cidr": "10.44.0.1/24",
+            "endpoint": "vpn.example.com",
+            "listen_port": 51820,
+            "dns": "10.44.0.1",
+        },
+        headers=admin,
+    )
+    assert configured.status_code == 200
+    assert configured.json()["runtime_enabled"] is False
+
+    created = client.post(
+        "/api/v1/vpn/peers",
+        json={"name": "Alice laptop", "address": "10.44.0.2/32"},
+        headers=admin,
+    )
+    assert created.status_code == 201
+    assert created.json()["enabled"] is True
+    assert created.json()["client_config"] is None
+    peer_id = created.json()["id"]
+    assert len(client.get("/api/v1/vpn/peers", headers=admin).json()) == 1
+
+    assert client.delete(f"/api/v1/vpn/peers/{peer_id}", headers=admin).status_code == 204
+    assert client.get("/api/v1/vpn/peers", headers=admin).json()[0]["enabled"] is False
+
+
+def test_vpn_is_tenant_scoped_and_admin_only(client, auth):
+    body = {"name": "Private", "address_cidr": "10.8.0.1/24", "endpoint": "vpn.test"}
+    assert client.put("/api/v1/vpn/network", json=body, headers=auth("user", "a")).status_code == 403
+    assert client.get("/api/v1/vpn/network", headers=auth("admin", "b", ["tenant_admin"])).status_code == 404
+
+
+def test_vpn_rejects_server_and_duplicate_peer_addresses(client, auth):
+    admin = auth("admin", "tenant-a", ["tenant_admin"])
+    client.put(
+        "/api/v1/vpn/network",
+        json={"name": "Private", "address_cidr": "10.8.0.1/24", "endpoint": "vpn.test"},
+        headers=admin,
+    )
+    invalid = client.post(
+        "/api/v1/vpn/peers", json={"name": "server", "address": "10.8.0.1/32"}, headers=admin
+    )
+    assert invalid.status_code == 422
+    first = client.post(
+        "/api/v1/vpn/peers", json={"name": "one", "address": "10.8.0.2/32"}, headers=admin
+    )
+    assert first.status_code == 201
+    duplicate = client.post(
+        "/api/v1/vpn/peers", json={"name": "two", "address": "10.8.0.2/32"}, headers=admin
+    )
+    assert duplicate.status_code == 409

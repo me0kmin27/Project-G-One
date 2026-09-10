@@ -7,7 +7,14 @@ from g_one.db import Base
 from g_one.migrations import migration_directory, upgrade_database
 
 
-EXPECTED_TABLES = {"alembic_version", "audit_events", "devices", "support_requests"}
+EXPECTED_TABLES = {
+    "alembic_version",
+    "audit_events",
+    "devices",
+    "support_requests",
+    "vpn_networks",
+    "vpn_peers",
+}
 
 
 def test_upgrade_builds_database_from_scratch_outside_project_directory(tmp_path, monkeypatch):

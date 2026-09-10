@@ -7,6 +7,7 @@ import argparse
 import os
 from pathlib import Path
 import secrets
+import base64
 import tempfile
 
 
@@ -40,6 +41,7 @@ def ensure_environment(path: Path) -> list[str]:
         "G_ONE_DB_PASSWORD": secrets.token_urlsafe(32),
         "G_ONE_DB_ROOT_PASSWORD": secrets.token_urlsafe(48),
         "G_ONE_CONSOLE_PASSWORD": secrets.token_urlsafe(32),
+        "G_ONE_WIREGUARD_PRIVATE_KEY": base64.b64encode(secrets.token_bytes(32)).decode(),
         **DEFAULTS,
     }
     additions = [f"{key}={value}" for key, value in values.items() if key not in keys]
