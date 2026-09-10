@@ -1,7 +1,14 @@
 import base64
 from types import SimpleNamespace
 
-from g_one.wireguard import generate_keypair, render_client_config, render_server_config
+import pytest
+
+from g_one.wireguard import (
+    generate_keypair,
+    normalize_allowed_ips,
+    render_client_config,
+    render_server_config,
+)
 
 
 def test_generates_wireguard_keypair_and_split_tunnel_config():
@@ -44,3 +51,12 @@ def test_server_config_excludes_revoked_peers():
     config = render_server_config(network, peers, private_key)
     assert active_public_key in config
     assert revoked_public_key not in config
+
+
+def test_normalizes_client_routes_and_rejects_invalid_values():
+    assert normalize_allowed_ips("10.44.0.7/24, 192.168.10.0/24") == (
+        "10.44.0.0/24, 192.168.10.0/24"
+    )
+
+    with pytest.raises(ValueError, match="valid IPv4 or IPv6 CIDR"):
+        normalize_allowed_ips("not-a-network")

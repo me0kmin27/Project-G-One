@@ -25,11 +25,13 @@ from .schemas import (
     VpnPeerCreate,
     VpnPeerEnrollment,
     VpnPeerRead,
+    VpnPeerRoutesUpdate,
 )
 from .wireguard import (
     address_belongs,
     apply_config,
     generate_keypair,
+    normalize_allowed_ips,
     public_key,
     render_client_config,
     render_server_config,
@@ -261,6 +263,7 @@ def network_response(network: VpnNetwork, request: Request) -> VpnNetworkRead:
             "server_public_key": public_key(settings.wireguard_private_key)
             if settings.wireguard_private_key else None,
             "runtime_enabled": settings.wireguard_apply,
+            "network_route": str(ipaddress.ip_interface(network.address_cidr).network),
         }
     )
 
@@ -344,6 +347,9 @@ def create_vpn_peer(
     network = get_vpn_network(session, principal.tenant_id)
     try:
         address = address_belongs(network.address_cidr, body.address)
+        allowed_ips = normalize_allowed_ips(
+            body.allowed_ips or str(ipaddress.ip_interface(network.address_cidr).network)
+        )
         client_private, generated_public = generate_keypair()
         peer_public = validate_key(body.public_key) if body.public_key else generated_public
     except ValueError as exc:
@@ -354,6 +360,7 @@ def create_vpn_peer(
         name=body.name.strip(),
         public_key=peer_public,
         address=address,
+        allowed_ips=allowed_ips,
         persistent_keepalive=body.persistent_keepalive,
     )
     session.add(peer)
@@ -369,9 +376,41 @@ def create_vpn_peer(
     settings = request.app.state.settings
     if body.public_key is None and settings.wireguard_private_key:
         config = render_client_config(
-            network, client_private, address, public_key(settings.wireguard_private_key)
+            network, client_private, address, public_key(settings.wireguard_private_key), allowed_ips
         )
     return VpnPeerEnrollment.model_validate(peer).model_copy(update={"client_config": config})
+
+
+@router.put("/api/v1/vpn/peers/{peer_id}/routes", response_model=VpnPeerRead)
+def update_vpn_peer_routes(
+    peer_id: str,
+    body: VpnPeerRoutesUpdate,
+    request: Request,
+    principal: CurrentPrincipal,
+    session: DatabaseSession,
+):
+    principal.require_role("tenant_admin")
+    peer = session.scalar(
+        select(VpnPeer).where(VpnPeer.id == peer_id, VpnPeer.tenant_id == principal.tenant_id)
+    )
+    if peer is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "VPN peer not found")
+    try:
+        peer.allowed_ips = normalize_allowed_ips(body.allowed_ips)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    audit(
+        session,
+        principal,
+        "vpn.peer.routes.updated",
+        "vpn_peer",
+        peer.id,
+        allowed_ips=peer.allowed_ips,
+    )
+    sync_vpn(session, get_vpn_network(session, principal.tenant_id), request)
+    session.commit()
+    session.refresh(peer)
+    return peer
 
 
 @router.delete("/api/v1/vpn/peers/{peer_id}", status_code=status.HTTP_204_NO_CONTENT)

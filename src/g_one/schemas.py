@@ -120,6 +120,7 @@ class VpnNetworkRead(ApiModel):
     enabled: bool
     server_public_key: str | None = None
     runtime_enabled: bool = False
+    network_route: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -128,7 +129,12 @@ class VpnPeerCreate(ApiModel):
     name: str = Field(min_length=1, max_length=128)
     address: str = Field(max_length=64)
     public_key: str | None = Field(default=None, max_length=44)
+    allowed_ips: str | None = Field(default=None, max_length=1024)
     persistent_keepalive: int = Field(default=25, ge=0, le=65535)
+
+
+class VpnPeerRoutesUpdate(ApiModel):
+    allowed_ips: str = Field(min_length=1, max_length=1024)
 
 
 class VpnPeerRead(ApiModel):
@@ -137,6 +143,7 @@ class VpnPeerRead(ApiModel):
     name: str
     public_key: str
     address: str
+    allowed_ips: str
     persistent_keepalive: int
     enabled: bool
     created_at: datetime

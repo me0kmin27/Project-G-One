@@ -155,9 +155,18 @@ def test_admin_can_configure_vpn_and_manage_peer(client, auth):
     )
     assert created.status_code == 201
     assert created.json()["enabled"] is True
+    assert created.json()["allowed_ips"] == "10.44.0.0/24"
     assert created.json()["client_config"] is None
     peer_id = created.json()["id"]
     assert len(client.get("/api/v1/vpn/peers", headers=admin).json()) == 1
+
+    routes = client.put(
+        f"/api/v1/vpn/peers/{peer_id}/routes",
+        json={"allowed_ips": "10.44.0.0/24, 192.168.20.12/24"},
+        headers=admin,
+    )
+    assert routes.status_code == 200
+    assert routes.json()["allowed_ips"] == "10.44.0.0/24, 192.168.20.0/24"
 
     assert client.delete(f"/api/v1/vpn/peers/{peer_id}", headers=admin).status_code == 204
     assert client.get("/api/v1/vpn/peers", headers=admin).json()[0]["enabled"] is False
