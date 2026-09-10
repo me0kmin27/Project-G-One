@@ -27,9 +27,88 @@ class ConsoleSessionCreate(ApiModel):
         return normalized
 
 
+class UserSessionCreate(ApiModel):
+    subject: str = Field(min_length=1, max_length=128)
+    tenant_id: str = Field(min_length=1, max_length=128)
+    password: str = Field(min_length=8, max_length=512)
+
+
 class SessionToken(ApiModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class WorkspaceUpdate(ApiModel):
+    name: str = Field(min_length=1, max_length=128)
+
+
+class WorkspaceRead(ApiModel):
+    id: str
+    name: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserCreate(ApiModel):
+    subject: str = Field(min_length=1, max_length=128)
+    display_name: str = Field(min_length=1, max_length=128)
+    email: str | None = Field(default=None, max_length=255)
+    password: str = Field(min_length=8, max_length=512)
+    roles: set[str] = Field(default_factory=set)
+    vpn_address: str | None = Field(default=None, max_length=64)
+    allowed_ips: str = Field(default="", max_length=1024)
+
+
+class UserUpdate(ApiModel):
+    display_name: str = Field(min_length=1, max_length=128)
+    email: str | None = Field(default=None, max_length=255)
+    roles: set[str] = Field(default_factory=set)
+    status: str = Field(pattern="^(active|suspended)$")
+    password: str | None = Field(default=None, min_length=8, max_length=512)
+    vpn_address: str | None = Field(default=None, max_length=64)
+    allowed_ips: str = Field(default="", max_length=1024)
+
+
+class UserRead(ApiModel):
+    id: str
+    subject: str
+    display_name: str
+    email: str | None
+    roles: list[str]
+    vpn_address: str | None
+    allowed_ips: str
+    policy_version: int
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class RoleRead(ApiModel):
+    id: str
+    name: str
+    permissions: list[str]
+
+
+class ApiTokenCreate(ApiModel):
+    name: str = Field(min_length=1, max_length=128)
+    scopes: set[str] = Field(min_length=1)
+    lifetime_days: int = Field(default=30, ge=1, le=365)
+
+
+class ApiTokenRead(ApiModel):
+    id: str
+    name: str
+    prefix: str
+    scopes: list[str]
+    created_by: str
+    expires_at: datetime
+    created_at: datetime
+    revoked_at: datetime | None
+
+
+class ApiTokenIssued(ApiTokenRead):
+    token: str
 
 
 class DeviceCreate(ApiModel):
@@ -152,3 +231,11 @@ class VpnPeerRead(ApiModel):
 
 class VpnPeerEnrollment(VpnPeerRead):
     client_config: str | None = None
+
+
+class ClientPolicy(ApiModel):
+    version: int
+    poll_interval_seconds: int = 15
+    user: UserRead
+    vpn: VpnNetworkRead | None
+    devices: list[DeviceRead]

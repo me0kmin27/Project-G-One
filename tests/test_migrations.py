@@ -9,11 +9,14 @@ from g_one.migrations import migration_directory, upgrade_database
 
 EXPECTED_TABLES = {
     "alembic_version",
+    "api_tokens",
     "audit_events",
     "devices",
     "support_requests",
     "vpn_networks",
     "vpn_peers",
+    "workspace_users",
+    "workspaces",
 }
 
 
