@@ -1,3 +1,4 @@
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -31,7 +32,7 @@ public partial class MainWindow : Window
             client = new HttpClient { BaseAddress = new Uri(settings!.serverUrl.TrimEnd('/') + "/") };
             var response = await client.PostAsJsonAsync("api/v1/session/login", new { subject = SubjectBox.Text, tenant_id = settings.workspace, password = PasswordBox.Password });
             response.EnsureSuccessStatusCode();
-            accessToken = (await response.Content.ReadFromJsonAsync<SessionToken>())!.access_token;
+            var accessToken = (await response.Content.ReadFromJsonAsync<SessionToken>())!.access_token;
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
             var me = await client.GetFromJsonAsync<Principal>("api/v1/me");
             WelcomeText.Text = $"{me!.subject} · {me.tenant_id}";
