@@ -20,4 +20,8 @@ IDE나 CI에서 아래 표준 명령을 직접 실행해도 같은 EXE를 만들
 dotnet publish windows/GOne.Client/GOne.Client.csproj -c Release -o windows/dist/win-x64
 ```
 
-현재 수직 슬라이스는 계정 로그인, 자동 장치 등록, 서버 정책 주기 동기화, VPN 주소·라우팅 표시와 명시적 로그아웃 시 메모리 세션 정리를 제공합니다. 실제 WireGuard/SMB 시스템 변경은 권한 분리 Windows Service와 서명된 정책 IPC가 준비된 뒤 연결하며 UI 프로세스에서 관리자 명령을 직접 실행하지 않습니다.
+대상 PC에는 공식 WireGuard for Windows가 설치되어 있어야 합니다. 로그인하면 클라이언트가
+장치용 키를 새로 등록하고 `wireguard.exe /installtunnelservice`로 `GOne` 터널을 즉시
+연결합니다. 로그아웃하거나 창을 닫으면 터널 서비스를 제거합니다. WireGuard 경로가 기본
+설치 위치와 다르면 `clientsettings.json`의 `wireguardPath`를 변경하십시오. 터널 서비스
+설치 권한이 없는 PC에서는 Windows 관리자 승인 또는 관리형 설치 정책이 필요합니다.
