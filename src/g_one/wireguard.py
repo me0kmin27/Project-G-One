@@ -62,13 +62,29 @@ def render_server_config(network, peers, private_key: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_client_config(network, private_key: str, address: str, server_public_key: str) -> str:
-    vpn_routes = str(ipaddress.ip_interface(network.address_cidr).network)
+def render_client_config(
+    network, private_key: str, address: str, server_public_key: str, allowed_ips: str | None = None
+) -> str:
+    vpn_routes = allowed_ips or str(ipaddress.ip_interface(network.address_cidr).network)
     lines = ["[Interface]", f"PrivateKey = {private_key}", f"Address = {address}"]
     if network.dns:
         lines.append(f"DNS = {network.dns}")
     lines += ["", "[Peer]", f"PublicKey = {server_public_key}", f"Endpoint = {network.endpoint}:{network.listen_port}", f"AllowedIPs = {vpn_routes}", "PersistentKeepalive = 25"]
     return "\n".join(lines) + "\n"
+
+
+def normalize_allowed_ips(value: str) -> str:
+    """Validate and normalize a comma-separated WireGuard client route list."""
+    routes = [part.strip() for part in value.split(",") if part.strip()]
+    if not routes:
+        raise ValueError("at least one route is required")
+    if len(routes) > 32:
+        raise ValueError("no more than 32 routes are allowed")
+    try:
+        normalized = [str(ipaddress.ip_network(route, strict=False)) for route in routes]
+    except ValueError as exc:
+        raise ValueError("routes must be valid IPv4 or IPv6 CIDR values") from exc
+    return ", ".join(dict.fromkeys(normalized))
 
 
 def address_belongs(network_cidr: str, address: str) -> str:
