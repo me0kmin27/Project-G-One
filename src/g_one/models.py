@@ -70,6 +70,12 @@ class Workspace(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class InstallationState(Base):
+    __tablename__ = "installation_state"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    initialized: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class WorkspaceUser(Base):
     __tablename__ = "workspace_users"
     __table_args__ = (UniqueConstraint("tenant_id", "subject"),)
