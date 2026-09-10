@@ -3,8 +3,7 @@ $project = Join-Path $PSScriptRoot "GOne.Client\GOne.Client.csproj"
 $output = Join-Path $PSScriptRoot "dist\win-x64"
 
 Remove-Item $output -Recurse -Force -ErrorAction SilentlyContinue
-dotnet publish $project -c Release -r win-x64 --self-contained true `
-  -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o $output
+dotnet publish $project -c Release -o $output
 
 if ($LASTEXITCODE -ne 0) {
   throw "dotnet publish failed with exit code $LASTEXITCODE"
