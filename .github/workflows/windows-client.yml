@@ -1,0 +1,32 @@
+name: Windows client executable
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build self-contained EXE
+        shell: pwsh
+        run: ./windows/publish.ps1
+      - name: Verify executable package
+        shell: pwsh
+        run: |
+          if (-not (Test-Path ./windows/dist/win-x64/GOne.Client.exe)) { throw "GOne.Client.exe was not produced" }
+          if (-not (Test-Path ./windows/dist/win-x64/clientsettings.json)) { throw "clientsettings.json was not produced" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GOne.Client-win-x64
+          path: windows/dist/win-x64/
+          if-no-files-found: error
