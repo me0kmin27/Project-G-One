@@ -100,3 +100,48 @@ class AuditEventRead(ApiModel):
     outcome: str
     details: dict
     occurred_at: datetime
+
+
+class VpnNetworkCreate(ApiModel):
+    name: str = Field(min_length=1, max_length=128)
+    address_cidr: str = Field(default="10.44.0.1/24", max_length=64)
+    endpoint: str = Field(min_length=1, max_length=255)
+    listen_port: int = Field(default=51820, ge=1, le=65535)
+    dns: str | None = Field(default=None, max_length=255)
+
+
+class VpnNetworkRead(ApiModel):
+    id: str
+    name: str
+    address_cidr: str
+    endpoint: str
+    listen_port: int
+    dns: str | None
+    enabled: bool
+    server_public_key: str | None = None
+    runtime_enabled: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+
+class VpnPeerCreate(ApiModel):
+    name: str = Field(min_length=1, max_length=128)
+    address: str = Field(max_length=64)
+    public_key: str | None = Field(default=None, max_length=44)
+    persistent_keepalive: int = Field(default=25, ge=0, le=65535)
+
+
+class VpnPeerRead(ApiModel):
+    id: str
+    network_id: str
+    name: str
+    public_key: str
+    address: str
+    persistent_keepalive: int
+    enabled: bool
+    created_at: datetime
+    revoked_at: datetime | None
+
+
+class VpnPeerEnrollment(VpnPeerRead):
+    client_config: str | None = None

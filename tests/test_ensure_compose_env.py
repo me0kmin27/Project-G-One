@@ -1,3 +1,4 @@
+import base64
 import stat
 
 from scripts.configure_server import ALLOWED_SETTINGS, read_environment, write_setting
@@ -10,17 +11,24 @@ def test_creates_complete_private_environment(tmp_path):
     additions = ensure_environment(path)
     contents = path.read_text()
 
-    assert len(additions) == 10
+    assert len(additions) == 11
     assert assigned_keys(contents) == {
         "G_ONE_JWT_SECRET",
         "G_ONE_DB_PASSWORD",
         "G_ONE_DB_ROOT_PASSWORD",
         "G_ONE_CONSOLE_PASSWORD",
+        "G_ONE_WIREGUARD_PRIVATE_KEY",
         *DEFAULTS,
     }
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     secret = next(line.split("=", 1)[1] for line in contents.splitlines() if line.startswith("G_ONE_JWT_SECRET="))
     assert len(secret) >= 32
+    wireguard_key = next(
+        line.split("=", 1)[1]
+        for line in contents.splitlines()
+        if line.startswith("G_ONE_WIREGUARD_PRIVATE_KEY=")
+    )
+    assert len(base64.b64decode(wireguard_key, validate=True)) == 32
 
 
 def test_preserves_existing_values_and_is_idempotent(tmp_path):
@@ -31,7 +39,7 @@ def test_preserves_existing_values_and_is_idempotent(tmp_path):
     first_contents = path.read_text()
     second_additions = ensure_environment(path)
 
-    assert len(first_additions) == 8
+    assert len(first_additions) == 9
     assert second_additions == []
     assert path.read_text() == first_contents
     assert "G_ONE_HTTP_PORT=9000" in first_contents

@@ -31,8 +31,20 @@ services:
       G_ONE_JWT_ISSUER: ${G_ONE_JWT_ISSUER:-g-one}
       G_ONE_JWT_AUDIENCE: ${G_ONE_JWT_AUDIENCE:-g-one-api}
       G_ONE_CONSOLE_PASSWORD: ${G_ONE_CONSOLE_PASSWORD:?run scripts/ensure_compose_env.py first}
+      G_ONE_WIREGUARD_PRIVATE_KEY: ${G_ONE_WIREGUARD_PRIVATE_KEY:?run scripts/ensure_compose_env.py first}
+      G_ONE_WIREGUARD_APPLY: ${G_ONE_WIREGUARD_APPLY:-true}
+      G_ONE_WIREGUARD_INTERFACE: wg0
+      G_ONE_WIREGUARD_CONFIG_PATH: /etc/wireguard/wg0.conf
+    user: root
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      net.ipv4.ip_forward: "1"
     ports:
       - "${G_ONE_HTTP_BIND:-0.0.0.0}:${G_ONE_HTTP_PORT:-8000}:8000"
+      - "${G_ONE_WIREGUARD_PORT:-51820}:${G_ONE_WIREGUARD_PORT:-51820}/udp"
+    volumes:
+      - g-one-wireguard:/etc/wireguard
     depends_on:
       database:
         condition: service_healthy
@@ -42,6 +54,7 @@ services:
 
 volumes:
   g-one-database:
+  g-one-wireguard:
 
 networks:
   backend:

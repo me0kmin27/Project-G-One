@@ -9,7 +9,8 @@ WORKDIR /app
 COPY pyproject.toml README.md LICENSE alembic.ini ./
 COPY src ./src
 COPY migrations ./migrations
-RUN pip install --no-cache-dir .
+RUN apt-get update && apt-get install -y --no-install-recommends wireguard-tools iproute2 && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir .
 
 RUN addgroup --system g-one \
     && adduser --system --ingroup g-one --home /app g-one \

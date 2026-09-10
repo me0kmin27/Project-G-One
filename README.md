@@ -58,7 +58,10 @@ API 문서는 `http://127.0.0.1:8000/docs`, 상태 확인은 `/healthz`와 `/rea
 지원 요청 및 감사 로그 조회를 수행할 수 있습니다.
 기본 SQLite 파일은 `g-one.db`이며 `G_ONE_DATABASE_URL`로 변경할 수 있습니다. 현재 구현은
 장치 등록·폐기, tenant 범위 조회, 원격 지원 요청·동의·종료 및 감사 조회의 첫 수직
-슬라이스입니다. 실제 인터넷 연결 배포 전에는 Authentik OIDC/JWKS 검증과 MariaDB
+슬라이스와 WireGuard VPN 서버·피어 관리를 제공합니다. 콘솔의 **VPN 네트워크**에서 서버
+CIDR과 공개 엔드포인트를 설정한 뒤 피어를 추가하면 클라이언트 설정이 한 번만 표시됩니다.
+생성된 클라이언트 개인 키는 DB에 저장하지 않으므로 즉시 안전하게 보관해야 합니다.
+실제 인터넷 연결 배포 전에는 Authentik OIDC/JWKS 검증과 MariaDB
 백업·복구 훈련을 완료해야 합니다.
 
 ### Docker Compose + MariaDB 배포
@@ -142,6 +145,19 @@ python3 scripts/manage_server.py stop
 MariaDB 데이터는 `g-one-database` Docker 볼륨에 보존되며 `stop`은 볼륨을 삭제하지
 않습니다. 데이터까지 제거하는 `docker compose down --volumes`는 초기화가 명확히 필요한
 경우에만 직접 실행해야 합니다.
+
+### WireGuard 운영 설정
+
+설치 스크립트는 서버 개인 키를 `.env`에 생성하고 Compose는 UDP 51820 포트와 `NET_ADMIN`
+권한을 웹 컨테이너에 제공합니다. 호스트 방화벽에서 `${G_ONE_WIREGUARD_PORT:-51820}/udp`를
+허용하고 콘솔에 입력한 엔드포인트 DNS가 서버 공인 IP를 가리키게 하십시오. 포트를 바꾸면
+`.env`와 웹 서버 설정의 포트를 동일하게 변경한 후 컨테이너를 다시 시작해야 합니다.
+런타임 적용이 필요 없는 개발 환경에서는 `G_ONE_WIREGUARD_APPLY=false`를 사용합니다.
+
+생성되는 클라이언트 설정은 VPN CIDR만 라우팅하는 split tunnel 방식입니다. 전체 터널이나
+LAN 라우팅에는 별도 방화벽·NAT 정책이 필요합니다. 웹 프로세스에 네트워크 관리 권한이
+부여되므로 콘솔은 반드시 HTTPS 리버스 프록시 뒤에 두고 API 포트를 신뢰된 프록시로만
+제한하십시오.
 
 ## 문서 구조
 

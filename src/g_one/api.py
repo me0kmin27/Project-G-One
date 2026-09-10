@@ -1,12 +1,15 @@
 from datetime import datetime, timedelta, timezone
 import hmac
+import ipaddress
+import subprocess
 
 from fastapi import APIRouter, HTTPException, Request, status
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 
 from .auth import CurrentPrincipal, Principal, encode_token
 from .db import DatabaseSession
-from .models import AuditEvent, Device, SupportRequest
+from .models import AuditEvent, Device, SupportRequest, VpnNetwork, VpnPeer
 from .schemas import (
     AuditEventRead,
     ConsoleSessionCreate,
@@ -17,6 +20,20 @@ from .schemas import (
     SupportDecision,
     SupportRequestCreate,
     SupportRequestRead,
+    VpnNetworkCreate,
+    VpnNetworkRead,
+    VpnPeerCreate,
+    VpnPeerEnrollment,
+    VpnPeerRead,
+)
+from .wireguard import (
+    address_belongs,
+    apply_config,
+    generate_keypair,
+    public_key,
+    render_client_config,
+    render_server_config,
+    validate_key,
 )
 
 router = APIRouter()
@@ -228,3 +245,152 @@ def list_audit_events(principal: CurrentPrincipal, session: DatabaseSession):
         .order_by(AuditEvent.occurred_at.desc())
         .limit(200)
     ).all()
+
+
+def get_vpn_network(session, tenant_id: str) -> VpnNetwork:
+    network = session.scalar(select(VpnNetwork).where(VpnNetwork.tenant_id == tenant_id))
+    if network is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "VPN network not configured")
+    return network
+
+
+def network_response(network: VpnNetwork, request: Request) -> VpnNetworkRead:
+    settings = request.app.state.settings
+    return VpnNetworkRead.model_validate(network).model_copy(
+        update={
+            "server_public_key": public_key(settings.wireguard_private_key)
+            if settings.wireguard_private_key else None,
+            "runtime_enabled": settings.wireguard_apply,
+        }
+    )
+
+
+def sync_vpn(session, network: VpnNetwork, request: Request) -> None:
+    settings = request.app.state.settings
+    if not settings.wireguard_private_key:
+        return
+    peers = session.scalars(
+        select(VpnPeer).where(
+            VpnPeer.network_id == network.id,
+            VpnPeer.tenant_id == network.tenant_id,
+        )
+    ).all()
+    try:
+        apply_config(render_server_config(network, peers, settings.wireguard_private_key), settings)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, f"WireGuard apply failed: {exc}"
+        ) from exc
+
+
+@router.put("/api/v1/vpn/network", response_model=VpnNetworkRead)
+def configure_vpn_network(
+    body: VpnNetworkCreate,
+    request: Request,
+    principal: CurrentPrincipal,
+    session: DatabaseSession,
+):
+    principal.require_role("tenant_admin")
+    try:
+        address_cidr = str(ipaddress.ip_interface(body.address_cidr))
+    except ValueError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid VPN interface address"
+        ) from exc
+    network = session.scalar(select(VpnNetwork).where(VpnNetwork.tenant_id == principal.tenant_id))
+    if network is None:
+        network = VpnNetwork(tenant_id=principal.tenant_id)
+        session.add(network)
+    network.name = body.name.strip()
+    network.address_cidr = address_cidr
+    network.endpoint = body.endpoint.strip()
+    network.listen_port = body.listen_port
+    network.dns = body.dns.strip() if body.dns else None
+    network.updated_at = now()
+    session.flush()
+    audit(session, principal, "vpn.network.configured", "vpn_network", network.id)
+    sync_vpn(session, network, request)
+    session.commit()
+    return network_response(network, request)
+
+
+@router.get("/api/v1/vpn/network", response_model=VpnNetworkRead)
+def read_vpn_network(request: Request, principal: CurrentPrincipal, session: DatabaseSession):
+    return network_response(get_vpn_network(session, principal.tenant_id), request)
+
+
+@router.get("/api/v1/vpn/peers", response_model=list[VpnPeerRead])
+def list_vpn_peers(principal: CurrentPrincipal, session: DatabaseSession):
+    principal.require_role("tenant_admin", "support")
+    return session.scalars(
+        select(VpnPeer)
+        .where(VpnPeer.tenant_id == principal.tenant_id)
+        .order_by(VpnPeer.created_at)
+    ).all()
+
+
+@router.post(
+    "/api/v1/vpn/peers",
+    response_model=VpnPeerEnrollment,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_vpn_peer(
+    body: VpnPeerCreate,
+    request: Request,
+    principal: CurrentPrincipal,
+    session: DatabaseSession,
+):
+    principal.require_role("tenant_admin")
+    network = get_vpn_network(session, principal.tenant_id)
+    try:
+        address = address_belongs(network.address_cidr, body.address)
+        client_private, generated_public = generate_keypair()
+        peer_public = validate_key(body.public_key) if body.public_key else generated_public
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    peer = VpnPeer(
+        tenant_id=principal.tenant_id,
+        network_id=network.id,
+        name=body.name.strip(),
+        public_key=peer_public,
+        address=address,
+        persistent_keepalive=body.persistent_keepalive,
+    )
+    session.add(peer)
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "peer key or address already exists") from exc
+    audit(session, principal, "vpn.peer.created", "vpn_peer", peer.id, address=address)
+    sync_vpn(session, network, request)
+    session.commit()
+    config = None
+    settings = request.app.state.settings
+    if body.public_key is None and settings.wireguard_private_key:
+        config = render_client_config(
+            network, client_private, address, public_key(settings.wireguard_private_key)
+        )
+    return VpnPeerEnrollment.model_validate(peer).model_copy(update={"client_config": config})
+
+
+@router.delete("/api/v1/vpn/peers/{peer_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_vpn_peer(
+    peer_id: str,
+    request: Request,
+    principal: CurrentPrincipal,
+    session: DatabaseSession,
+):
+    principal.require_role("tenant_admin")
+    peer = session.scalar(
+        select(VpnPeer).where(
+            VpnPeer.id == peer_id, VpnPeer.tenant_id == principal.tenant_id
+        )
+    )
+    if peer is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "VPN peer not found")
+    peer.enabled = False
+    peer.revoked_at = now()
+    audit(session, principal, "vpn.peer.revoked", "vpn_peer", peer.id)
+    sync_vpn(session, get_vpn_network(session, principal.tenant_id), request)
+    session.commit()

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 import uuid
 
-from sqlalchemy import JSON, DateTime, ForeignKeyConstraint, String, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKeyConstraint, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -60,3 +60,37 @@ class AuditEvent(Base):
     details: Mapped[dict] = mapped_column(JSON, default=dict)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
+
+class VpnNetwork(Base):
+    __tablename__ = "vpn_networks"
+    __table_args__ = (UniqueConstraint("tenant_id"), UniqueConstraint("tenant_id", "id"))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(String(128), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    address_cidr: Mapped[str] = mapped_column(String(64))
+    endpoint: Mapped[str] = mapped_column(String(255))
+    listen_port: Mapped[int] = mapped_column(Integer, default=51820)
+    dns: Mapped[str | None] = mapped_column(String(255))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class VpnPeer(Base):
+    __tablename__ = "vpn_peers"
+    __table_args__ = (
+        ForeignKeyConstraint(["tenant_id", "network_id"], ["vpn_networks.tenant_id", "vpn_networks.id"]),
+        UniqueConstraint("tenant_id", "network_id", "public_key"),
+        UniqueConstraint("tenant_id", "network_id", "address"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    tenant_id: Mapped[str] = mapped_column(String(128), index=True)
+    network_id: Mapped[str] = mapped_column(String(36))
+    name: Mapped[str] = mapped_column(String(128))
+    public_key: Mapped[str] = mapped_column(String(44))
+    address: Mapped[str] = mapped_column(String(64))
+    allowed_ips: Mapped[str] = mapped_column(String(1024), default="0.0.0.0/0")
+    persistent_keepalive: Mapped[int] = mapped_column(Integer, default=25)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
