@@ -255,6 +255,10 @@ class VpnPeerEnrollment(VpnPeerRead):
     client_config: str | None = None
 
 
+class ClientVpnEnrollment(ApiModel):
+    device_name: str = Field(min_length=1, max_length=128)
+
+
 class ClientPolicy(ApiModel):
     version: int
     poll_interval_seconds: int = 15

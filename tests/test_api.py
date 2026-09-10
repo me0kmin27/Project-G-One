@@ -123,6 +123,23 @@ def test_admin_manages_workspace_users_roles_and_tokens(client, auth):
     assert policy.json()["user"]["allowed_ips"] == "10.77.0.0/24"
     assert policy.json()["vpn"]["endpoint"] == "vpn.acme.test"
 
+    client.app.state.settings.wireguard_private_key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    enrollment = client.post(
+        "/api/v1/client/vpn/enroll", json={"device_name": "ALICE-PC"}, headers=user_headers
+    )
+    assert enrollment.status_code == 200
+    assert enrollment.json()["name"] == "client:alice:ALICE-PC"
+    assert enrollment.json()["address"] == "10.77.0.10/32"
+    assert "PrivateKey = " in enrollment.json()["client_config"]
+    assert "Endpoint = vpn.acme.test:51820" in enrollment.json()["client_config"]
+
+    rotated = client.post(
+        "/api/v1/client/vpn/enroll", json={"device_name": "ALICE-PC"}, headers=user_headers
+    )
+    assert rotated.status_code == 200
+    assert rotated.json()["id"] == enrollment.json()["id"]
+    assert rotated.json()["public_key"] != enrollment.json()["public_key"]
+
     issued = client.post(
         "/api/v1/tokens",
         json={"name": "automation", "scopes": ["devices:read", "audit:read"], "lifetime_days": 30},

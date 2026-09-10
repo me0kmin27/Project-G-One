@@ -21,6 +21,7 @@ from .schemas import (
     ApiTokenIssued,
     ApiTokenRead,
     ClientPolicy,
+    ClientVpnEnrollment,
     ConsoleSessionCreate,
     DeviceCreate,
     DeviceRead,
@@ -308,6 +309,60 @@ def read_client_policy(request: Request, principal: ProvisionedPrincipal, sessio
         vpn=network_response(network, request) if network else None,
         devices=list(devices),
     )
+
+
+@router.post("/api/v1/client/vpn/enroll", response_model=VpnPeerEnrollment)
+def enroll_client_vpn(
+    body: ClientVpnEnrollment,
+    request: Request,
+    principal: ProvisionedPrincipal,
+    session: DatabaseSession,
+):
+    """Rotate and return the current user's device-specific WireGuard profile."""
+    user = session.scalar(select(WorkspaceUser).where(
+        WorkspaceUser.tenant_id == principal.tenant_id,
+        WorkspaceUser.subject == principal.subject,
+        WorkspaceUser.status == "active",
+    ))
+    if user is None or not user.vpn_address:
+        raise HTTPException(status.HTTP_409_CONFLICT, "VPN address is not assigned to this user")
+    network = get_vpn_network(session, principal.tenant_id)
+    settings = request.app.state.settings
+    if not settings.wireguard_private_key:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "VPN server key is not configured")
+
+    try:
+        address = address_belongs(network.address_cidr, user.vpn_address)
+        routes = normalize_allowed_ips(
+            user.allowed_ips or str(ipaddress.ip_interface(network.address_cidr).network)
+        )
+        private_key, peer_public_key = generate_keypair()
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+    peer_name = f"client:{principal.subject}:{body.device_name.strip()}"
+    peer = session.scalar(select(VpnPeer).where(
+        VpnPeer.tenant_id == principal.tenant_id,
+        VpnPeer.network_id == network.id,
+        VpnPeer.address == address,
+    ))
+    if peer is None:
+        peer = VpnPeer(tenant_id=principal.tenant_id, network_id=network.id, address=address)
+        session.add(peer)
+    peer.name = peer_name
+    peer.public_key = peer_public_key
+    peer.allowed_ips = routes
+    peer.persistent_keepalive = 25
+    peer.enabled = True
+    peer.revoked_at = None
+    session.flush()
+    audit(session, principal, "vpn.client.enrolled", "vpn_peer", peer.id, device=body.device_name.strip())
+    sync_vpn(session, network, request)
+    session.commit()
+    config = render_client_config(
+        network, private_key, address, public_key(settings.wireguard_private_key), routes
+    )
+    return VpnPeerEnrollment.model_validate(peer).model_copy(update={"client_config": config})
 
 
 @router.get("/api/v1/tokens", response_model=list[ApiTokenRead])
