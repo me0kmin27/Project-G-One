@@ -93,18 +93,19 @@ IP forwarding, 방화벽 및 NAT 정책을 별도로 구성해야 합니다. 이
 .\windows\publish.ps1
 ```
 
-`GOne.Client.exe`가 포함된 self-contained Windows x64 패키지는 GitHub Actions artifact로
-제공되며 대상 PC에 .NET 런타임이나 VPN 프로그램을 별도로 내려받을 필요가 없습니다.
-공식 WireGuard 런타임은 단일 EXE에 내장되며 최초 로그인 시 필요한 경우에만 관리자 승인
-후 자동 준비됩니다. 로그인 뒤 장치 전용 터널을 연결하고 로그아웃 또는 종료 시 정리합니다.
+`GOne.Client.msi` Windows x64 설치 패키지는 GitHub Actions artifact로 제공됩니다. MSI는
+self-contained 클라이언트, 설정, 시작 메뉴/자동 실행 등록과 WireGuard 공식 저장소가
+배포하는 Windows 런타임 설치 관리자를 함께 설치하므로 대상 PC에 .NET 또는 VPN 프로그램을
+미리 준비할 필요가 없습니다. 최초 연결에만 관리자 승인이 필요하며 설치된 앱은 Windows
+로그인 시 자동 시작됩니다. VPN 터널은 보안을 위해 명시적 앱 로그아웃·종료 때 정리됩니다.
 자세한 빌드 방법과 범위는 `windows/README.md`를 참고하십시오.
 
 관리자는 콘솔의 **클라이언트 배포**에서 내부 SMB 파일 서버를 등록하고 VPN, 허용 경로,
 파일 서버와 대상 사용자를 하나의 배포 프로필로 게시할 수 있습니다. 할당된 사용자 또는
-관리자가 다운로드하면 서버에 게시된 `GOne.Client.exe`와 10분 후 만료되는 등록 정보가
+관리자가 다운로드하면 서버에 게시된 `GOne.Client.msi`와 10분 후 만료되는 등록 정보가
 ZIP으로 제공됩니다. 배포 파일에는 VPN 개인 키나 SMB 암호를 포함하지 않습니다. Compose
 배포에서는 PR 병합 배포 작업이 Windows 패키지를 빌드하고
-`.deploy/windows-client/GOne.Client.exe`에 게시한 뒤 서버를 재시작합니다. 이 전용 배포
+`.deploy/windows-client/GOne.Client.msi`에 게시한 뒤 서버를 재시작합니다. 이 전용 배포
 디렉터리는 컨테이너가 만든 `windows/dist`의 소유권과 관계없이 배포 사용자가 관리합니다.
 수동 배포에서는 서버를 시작하기 전에 같은 경로에 Windows 패키지를 게시해야 합니다.
 

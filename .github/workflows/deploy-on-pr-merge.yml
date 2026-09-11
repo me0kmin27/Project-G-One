@@ -26,14 +26,14 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - name: Build self-contained EXE
+      - name: Build self-contained MSI
         shell: pwsh
         run: ./windows/publish.ps1
       - name: Publish Windows client artifact
         uses: actions/upload-artifact@v4
         with:
-          name: GOne.Client-win-x64
-          path: windows/dist/win-x64/
+          name: GOne.Client-msi-win-x64
+          path: windows/dist/win-x64/GOne.Client.msi
           if-no-files-found: error
 
   deploy:
@@ -51,11 +51,11 @@ jobs:
       - name: Download Windows client artifact
         uses: actions/download-artifact@v5
         with:
-          name: GOne.Client-win-x64
+          name: GOne.Client-msi-win-x64
           path: windows/dist/win-x64
 
       - name: Verify Windows client artifact
-        run: test -s windows/dist/win-x64/GOne.Client.exe
+        run: test -s windows/dist/win-x64/GOne.Client.msi
 
       - name: Prepare SSH
         run: |
@@ -101,7 +101,7 @@ jobs:
             -p "${{ secrets.DEPLOY_PORT }}" \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             "cd '${{ secrets.DEPLOY_PATH }}' && \
-             test -s .deploy/windows-client/GOne.Client.exe && \
+             test -s .deploy/windows-client/GOne.Client.msi && \
              python3 scripts/ensure_compose_env.py && \
              docker compose up -d database --wait --wait-timeout 120 && \
              python3 -m scripts.sync_database_credentials && \
@@ -115,5 +115,5 @@ jobs:
             -p "${{ secrets.DEPLOY_PORT }}" \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             "cd '${{ secrets.DEPLOY_PATH }}' && \
-             docker compose exec -T web test -s /opt/g-one/client/GOne.Client.exe && \
+             docker compose exec -T web test -s /opt/g-one/client/GOne.Client.msi && \
              docker compose exec -T web python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=10).read()\""

@@ -35,7 +35,7 @@ services:
       G_ONE_WIREGUARD_APPLY: ${G_ONE_WIREGUARD_APPLY:-true}
       G_ONE_WIREGUARD_INTERFACE: wg0
       G_ONE_WIREGUARD_CONFIG_PATH: /etc/wireguard/wg0.conf
-      G_ONE_WINDOWS_CLIENT_ARTIFACT: /opt/g-one/client/GOne.Client.exe
+      G_ONE_WINDOWS_CLIENT_ARTIFACT: /opt/g-one/client/GOne.Client.msi
     user: root
     cap_add:
       - NET_ADMIN

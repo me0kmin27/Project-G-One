@@ -1,0 +1,43 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="G-One Client" Manufacturer="Project G-One" Version="1.0.0"
+           UpgradeCode="D20E1D2D-4B57-4F02-898B-A5BD508ED4EF" Scope="perMachine">
+    <SummaryInformation Description="G-One managed WireGuard client" />
+    <MajorUpgrade DowngradeErrorMessage="A newer G-One Client is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="G-One Client" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ApplicationProgramsFolder" Name="G-One Client" />
+    </StandardDirectory>
+
+    <Feature Id="ProductFeature" Title="G-One Client" Level="1">
+      <ComponentGroupRef Id="ApplicationComponents" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <ComponentGroup Id="ApplicationComponents" Directory="INSTALLFOLDER">
+      <Component Id="ClientExecutable" Guid="*" Bitness="always64">
+        <File Id="ClientExe" Source="$(var.PublishDir)\GOne.Client.exe" KeyPath="yes">
+          <Shortcut Id="StartMenuShortcut" Directory="ApplicationProgramsFolder"
+                    Name="G-One Client" WorkingDirectory="INSTALLFOLDER" Advertise="no" />
+        </File>
+        <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\Run"
+                       Name="G-One Client" Value="&quot;[#ClientExe]&quot;" Type="string" />
+      </Component>
+      <Component Id="ClientSettings" Guid="*" Bitness="always64">
+        <File Source="$(var.PublishDir)\clientsettings.json" KeyPath="yes" />
+      </Component>
+      <Component Id="WireGuardRuntimeInstaller" Guid="*" Bitness="always64">
+        <File Source="$(var.WireGuardInstaller)" Name="wireguard-installer.exe" KeyPath="yes" />
+      </Component>
+      <Component Id="ProgramMenuFolderCleanup" Directory="ApplicationProgramsFolder" Guid="*">
+        <RemoveFolder Id="RemoveApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\Project G-One\Client" Name="Installed"
+                       Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+  </Fragment>
+</Wix>

@@ -214,7 +214,7 @@ def test_admin_assigns_web_client_download_to_user(client, auth):
     assert downloaded.status_code == 200
     assert downloaded.headers["cache-control"] == "no-store"
     with zipfile.ZipFile(io.BytesIO(downloaded.content)) as archive:
-        assert archive.read("GOne.Client.exe") == b"MZ-test-client"
+        assert archive.read("GOne.Client.msi") == b"MSI-test-client"
         manifest = json.loads(archive.read("deployment.json"))
     assert manifest["target_subject"] == "alice"
     assert manifest["vpn"]["allowed_ips"] == "10.70.0.0/24, 192.168.40.10/32"

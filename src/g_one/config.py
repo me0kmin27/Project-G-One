@@ -15,7 +15,7 @@ class Settings:
     wireguard_interface: str = "wg0"
     wireguard_config_path: str = "/etc/wireguard/wg0.conf"
     wireguard_apply: bool = False
-    windows_client_artifact: str = "windows/dist/win-x64/GOne.Client.exe"
+    windows_client_artifact: str = "windows/dist/win-x64/GOne.Client.msi"
 
     @classmethod
     def from_environment(cls) -> "Settings":

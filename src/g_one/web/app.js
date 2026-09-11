@@ -83,7 +83,7 @@ async function loadDistribution(){
 async function downloadDeployment(profileId,subject){
   const response=await fetch(`/api/v1/client-deployments/${profileId}/download?subject=${encodeURIComponent(subject)}`,{headers:{Authorization:`Bearer ${state.token}`}});
   if(!response.ok){const data=await response.json().catch(()=>({detail:'다운로드 실패'}));throw new ApiError(data.detail,response.status);}
-  const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=(response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)||[])[1]||'GOne-Client.zip';link.click();URL.revokeObjectURL(url);
+  const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=(response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)||[])[1]||'GOne-Client-Installer.zip';link.click();URL.revokeObjectURL(url);
 }
 async function connect(){
   try{

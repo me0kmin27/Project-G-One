@@ -6,9 +6,10 @@ namespace GOne.Client;
 internal sealed class WindowsVpnManager
 {
     private const string TunnelName = "GOne";
-    private const string InstallerResource = "GOne.Client.Resources.wireguard-installer.exe";
     private static readonly string WireGuardPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WireGuard", "wireguard.exe");
+    private static readonly string PackagedInstallerPath = Path.Combine(
+        AppContext.BaseDirectory, "wireguard-installer.exe");
 
     public async Task ConnectAsync(string configuration)
     {
@@ -53,26 +54,16 @@ internal sealed class WindowsVpnManager
     {
         if (File.Exists(WireGuardPath)) return;
 
-        var installerPath = Path.Combine(Path.GetTempPath(), $"GOne-WireGuard-{Guid.NewGuid():N}.exe");
-        await using (var resource = typeof(WindowsVpnManager).Assembly.GetManifestResourceStream(InstallerResource)
-            ?? throw new InvalidOperationException("내장 VPN 런타임을 찾을 수 없습니다."))
-        await using (var installer = File.Create(installerPath))
-            await resource.CopyToAsync(installer);
+        if (!File.Exists(PackagedInstallerPath))
+            throw new InvalidOperationException("MSI에 포함된 공식 WireGuard 설치 관리자를 찾을 수 없습니다.");
 
-        try
+        using var process = Process.Start(new ProcessStartInfo(PackagedInstallerPath, "/install")
         {
-            using var process = Process.Start(new ProcessStartInfo(installerPath, "/install")
-            {
-                UseShellExecute = true,
-                Verb = "runas",
-            }) ?? throw new InvalidOperationException("내장 VPN 런타임 설치를 시작할 수 없습니다.");
-            await process.WaitForExitAsync();
-            if (process.ExitCode != 0 || !File.Exists(WireGuardPath))
-                throw new InvalidOperationException($"내장 VPN 런타임 준비에 실패했습니다 ({process.ExitCode}).");
-        }
-        finally
-        {
-            File.Delete(installerPath);
-        }
+            UseShellExecute = true,
+            Verb = "runas",
+        }) ?? throw new InvalidOperationException("WireGuard 런타임 설치를 시작할 수 없습니다.");
+        await process.WaitForExitAsync();
+        if (process.ExitCode != 0 || !File.Exists(WireGuardPath))
+            throw new InvalidOperationException($"WireGuard 런타임 준비에 실패했습니다 ({process.ExitCode}).");
     }
 }
