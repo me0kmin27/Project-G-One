@@ -2,8 +2,8 @@ name: Quality
 
 on:
   pull_request:
-  push:
-    branches: [main]
+  # Pull requests are the quality gate. A merged PR has already passed this
+  # workflow, so do not run the same test suite again for its push to main.
 
 permissions:
   contents: read
