@@ -72,14 +72,27 @@ jobs:
 
       - name: Upload to server
         run: |
+          ssh \
+            -i ~/.ssh/deploy_key \
+            -p "${{ secrets.DEPLOY_PORT }}" \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "mkdir -p '${{ secrets.DEPLOY_PATH }}/.deploy/windows-client'"
+
           rsync -az --delete \
             --exclude ".git" \
             --exclude ".github" \
+            --exclude ".deploy" \
             --exclude ".env" \
             --exclude "node_modules" \
+            --exclude "windows/dist" \
             -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.DEPLOY_PORT }}" \
             ./ \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/"
+
+          rsync -rz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.DEPLOY_PORT }}" \
+            windows/dist/win-x64/ \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:${{ secrets.DEPLOY_PATH }}/.deploy/windows-client/"
 
       - name: Rebuild, restart, and wait for web application
         run: |
@@ -88,7 +101,7 @@ jobs:
             -p "${{ secrets.DEPLOY_PORT }}" \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             "cd '${{ secrets.DEPLOY_PATH }}' && \
-             test -s windows/dist/win-x64/GOne.Client.exe && \
+             test -s .deploy/windows-client/GOne.Client.exe && \
              python3 scripts/ensure_compose_env.py && \
              docker compose up -d database --wait --wait-timeout 120 && \
              python3 -m scripts.sync_database_credentials && \
