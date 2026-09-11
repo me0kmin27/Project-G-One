@@ -1,3 +1,8 @@
+import io
+import json
+import zipfile
+
+
 def test_health_and_authentication(client):
     assert client.get("/healthz").json() == {"status": "ok"}
     assert client.get("/readyz").json() == {"status": "ready"}
@@ -159,6 +164,66 @@ def test_admin_manages_workspace_users_roles_and_tokens(client, auth):
     assert listed[0]["prefix"] == issued.json()["prefix"]
     assert client.delete(f"/api/v1/tokens/{token_id}", headers=admin).status_code == 204
     assert client.get("/api/v1/tokens", headers=admin).json()[0]["revoked_at"] is not None
+
+
+def test_admin_assigns_web_client_download_to_user(client, auth):
+    admin = auth("admin", "acme", ["tenant_admin"])
+    client.put(
+        "/api/v1/vpn/network",
+        json={"name": "Office VPN", "address_cidr": "10.70.0.1/24", "endpoint": "vpn.example.test"},
+        headers=admin,
+    )
+    assert client.post(
+        "/api/v1/users",
+        json={"subject": "alice", "display_name": "Alice", "password": "correct-horse", "roles": ["member"]},
+        headers=admin,
+    ).status_code == 201
+    server = client.post(
+        "/api/v1/file-servers",
+        json={"name": "Documents", "host": "files.internal", "shares": ["Team", "Home"]},
+        headers=admin,
+    )
+    assert server.status_code == 201
+    vpn = client.get("/api/v1/vpn/network", headers=admin).json()
+    profile = client.post(
+        "/api/v1/client-deployments",
+        json={
+            "name": "Alice office access",
+            "vpn_network_id": vpn["id"],
+            "allowed_ips": "10.70.0.0/24, 192.168.40.10/32",
+            "file_server_ids": [server.json()["id"]],
+            "target_subjects": ["alice"],
+        },
+        headers=admin,
+    )
+    assert profile.status_code == 201
+
+    alice = auth("alice", "acme", ["member"])
+    assert client.get("/api/v1/file-servers", headers=alice).status_code == 403
+    assigned = client.get("/api/v1/client-deployments", headers=alice).json()
+    assert [item["id"] for item in assigned] == [profile.json()["id"]]
+    denied = client.get(
+        f"/api/v1/client-deployments/{profile.json()['id']}/download",
+        headers=auth("mallory", "acme", ["member"]),
+    )
+    assert denied.status_code == 403
+
+    downloaded = client.get(
+        f"/api/v1/client-deployments/{profile.json()['id']}/download", headers=alice
+    )
+    assert downloaded.status_code == 200
+    assert downloaded.headers["cache-control"] == "no-store"
+    with zipfile.ZipFile(io.BytesIO(downloaded.content)) as archive:
+        assert archive.read("GOne.Client.exe") == b"MZ-test-client"
+        manifest = json.loads(archive.read("deployment.json"))
+    assert manifest["target_subject"] == "alice"
+    assert manifest["vpn"]["allowed_ips"] == "10.70.0.0/24, 192.168.40.10/32"
+    assert manifest["file_servers"] == [
+        {"name": "Documents", "host": "files.internal", "shares": ["Home", "Team"]}
+    ]
+    assert len(manifest["enrollment_code"]) >= 32
+    events = client.get("/api/v1/audit-events", headers=admin).json()
+    assert "client_deployment.downloaded" in [event["action"] for event in events]
 
 
 def test_management_is_admin_only_and_tenant_scoped(client, auth):

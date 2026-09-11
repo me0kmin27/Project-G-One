@@ -2,17 +2,22 @@ from datetime import datetime, timedelta, timezone
 import hmac
 import hashlib
 import ipaddress
+import io
+import json
+from pathlib import Path
 import secrets
 import subprocess
 from typing import Annotated
+import zipfile
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from .auth import CurrentPrincipal, Principal, encode_token
 from .db import DatabaseSession
-from .models import ApiToken, AuditEvent, Device, InstallationState, SupportRequest, VpnNetwork, VpnPeer, Workspace, WorkspaceUser
+from .models import ApiToken, AuditEvent, ClientDeploymentProfile, ClientEnrollmentCode, Device, FileServer, InstallationState, SupportRequest, VpnNetwork, VpnPeer, Workspace, WorkspaceUser
 from .passwords import hash_password, verify_password
 from .schemas import (
     AdministratorSetup,
@@ -22,9 +27,14 @@ from .schemas import (
     ApiTokenRead,
     ClientBootstrap,
     ClientBootstrapRequest,
+    ClientVpnEnrollment,
+    DeploymentProfileCreate,
+    DeploymentProfileRead,
     ConsoleSessionCreate,
     DeviceCreate,
     DeviceRead,
+    FileServerCreate,
+    FileServerRead,
     PrincipalRead,
     SessionToken,
     SetupStatus,
@@ -213,6 +223,216 @@ def validate_roles(roles: set[str]) -> list[str]:
     if unknown:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"unknown roles: {', '.join(sorted(unknown))}")
     return sorted(roles)
+
+
+def normalized_values(values: list[str], label: str) -> list[str]:
+    normalized = sorted({value.strip() for value in values if value.strip()})
+    if not normalized:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"{label} cannot be empty")
+    return normalized
+
+
+@router.get("/api/v1/file-servers", response_model=list[FileServerRead])
+def list_file_servers(principal: ProvisionedPrincipal, session: DatabaseSession):
+    principal.require_role("tenant_admin")
+    return session.scalars(
+        select(FileServer)
+        .where(FileServer.tenant_id == principal.tenant_id, FileServer.enabled.is_(True))
+        .order_by(FileServer.name)
+    ).all()
+
+
+@router.post("/api/v1/file-servers", response_model=FileServerRead, status_code=status.HTTP_201_CREATED)
+def create_file_server(
+    body: FileServerCreate, principal: ProvisionedPrincipal, session: DatabaseSession
+):
+    principal.require_role("tenant_admin")
+    host = body.host.strip().lower()
+    if any(character in host for character in ("/", "\\", ":")):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "host must be a DNS name or IP address")
+    server = FileServer(
+        tenant_id=principal.tenant_id,
+        name=body.name.strip(),
+        host=host,
+        shares=normalized_values(body.shares, "shares"),
+    )
+    session.add(server)
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "file server name already exists") from exc
+    audit(session, principal, "file_server.created", "file_server", server.id)
+    session.commit()
+    return server
+
+
+@router.get("/api/v1/client-deployments", response_model=list[DeploymentProfileRead])
+def list_client_deployments(principal: ProvisionedPrincipal, session: DatabaseSession):
+    profiles = session.scalars(
+        select(ClientDeploymentProfile)
+        .where(
+            ClientDeploymentProfile.tenant_id == principal.tenant_id,
+            ClientDeploymentProfile.enabled.is_(True),
+        )
+        .order_by(ClientDeploymentProfile.name)
+    ).all()
+    if "tenant_admin" in principal.roles:
+        return profiles
+    return [profile for profile in profiles if principal.subject in profile.target_subjects]
+
+
+@router.post(
+    "/api/v1/client-deployments",
+    response_model=DeploymentProfileRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_client_deployment(
+    body: DeploymentProfileCreate, principal: ProvisionedPrincipal, session: DatabaseSession
+):
+    principal.require_role("tenant_admin")
+    network = session.scalar(
+        select(VpnNetwork).where(
+            VpnNetwork.id == body.vpn_network_id,
+            VpnNetwork.tenant_id == principal.tenant_id,
+            VpnNetwork.enabled.is_(True),
+        )
+    )
+    if network is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "VPN network not found")
+    file_server_ids = normalized_values(body.file_server_ids, "file servers")
+    servers = session.scalars(
+        select(FileServer).where(
+            FileServer.tenant_id == principal.tenant_id,
+            FileServer.id.in_(file_server_ids),
+            FileServer.enabled.is_(True),
+        )
+    ).all()
+    if len(servers) != len(file_server_ids):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "file server not found")
+    subjects = normalized_values(body.target_subjects, "target subjects")
+    users = session.scalars(
+        select(WorkspaceUser).where(
+            WorkspaceUser.tenant_id == principal.tenant_id,
+            WorkspaceUser.subject.in_(subjects),
+            WorkspaceUser.status == "active",
+        )
+    ).all()
+    if len(users) != len(subjects):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "active target user not found")
+    try:
+        allowed_ips = normalize_allowed_ips(body.allowed_ips)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    profile = ClientDeploymentProfile(
+        tenant_id=principal.tenant_id,
+        name=body.name.strip(),
+        vpn_network_id=network.id,
+        allowed_ips=allowed_ips,
+        file_server_ids=file_server_ids,
+        target_subjects=subjects,
+    )
+    session.add(profile)
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "deployment profile name already exists") from exc
+    audit(
+        session,
+        principal,
+        "client_deployment.created",
+        "client_deployment",
+        profile.id,
+        target_subjects=subjects,
+    )
+    session.commit()
+    return profile
+
+
+@router.get("/api/v1/client-deployments/{profile_id}/download")
+def download_client_deployment(
+    profile_id: str,
+    request: Request,
+    principal: ProvisionedPrincipal,
+    session: DatabaseSession,
+    subject: str | None = Query(default=None, max_length=128),
+):
+    profile = session.scalar(
+        select(ClientDeploymentProfile).where(
+            ClientDeploymentProfile.id == profile_id,
+            ClientDeploymentProfile.tenant_id == principal.tenant_id,
+            ClientDeploymentProfile.enabled.is_(True),
+        )
+    )
+    if profile is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "deployment profile not found")
+    target = subject.strip() if subject else principal.subject
+    if target not in profile.target_subjects:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "deployment is not assigned to this user")
+    if target != principal.subject and "tenant_admin" not in principal.roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "cannot download for another user")
+
+    artifact = Path(request.app.state.settings.windows_client_artifact)
+    if not artifact.is_file():
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Windows client artifact is not published")
+    servers = session.scalars(
+        select(FileServer).where(
+            FileServer.tenant_id == principal.tenant_id,
+            FileServer.id.in_(profile.file_server_ids),
+            FileServer.enabled.is_(True),
+        )
+    ).all()
+    raw_code = secrets.token_urlsafe(32)
+    enrollment = ClientEnrollmentCode(
+        tenant_id=principal.tenant_id,
+        profile_id=profile.id,
+        subject=target,
+        token_hash=hashlib.sha256(raw_code.encode()).hexdigest(),
+        expires_at=now() + timedelta(minutes=10),
+        created_by=principal.subject,
+    )
+    session.add(enrollment)
+    session.flush()
+    manifest = {
+        "schema_version": 1,
+        "server_url": str(request.base_url).rstrip("/"),
+        "tenant_id": principal.tenant_id,
+        "profile": {"id": profile.id, "name": profile.name, "revision": profile.revision},
+        "target_subject": target,
+        "enrollment_code": raw_code,
+        "expires_at": enrollment.expires_at.isoformat(),
+        "vpn": {"network_id": profile.vpn_network_id, "allowed_ips": profile.allowed_ips},
+        "file_servers": [
+            {"name": server.name, "host": server.host, "shares": server.shares}
+            for server in servers
+        ],
+    }
+    bundle = io.BytesIO()
+    with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.write(artifact, "GOne.Client.exe")
+        archive.writestr("deployment.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+    bundle.seek(0)
+    audit(
+        session,
+        principal,
+        "client_deployment.downloaded",
+        "client_deployment",
+        profile.id,
+        target_subject=target,
+        enrollment_id=enrollment.id,
+    )
+    session.commit()
+    filename = f"GOne-{profile.id[:8]}-r{profile.revision}.zip"
+    return StreamingResponse(
+        bundle,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.get("/api/v1/workspace", response_model=WorkspaceRead)

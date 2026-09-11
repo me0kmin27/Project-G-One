@@ -37,11 +37,14 @@ def token(subject: str, tenant: str, roles: list[str] | None = None) -> str:
 
 @pytest.fixture
 def client(tmp_path):
+    artifact = tmp_path / "GOne.Client.exe"
+    artifact.write_bytes(b"MZ-test-client")
     settings = Settings(
         database_url=f"sqlite:///{tmp_path / 'test.db'}",
         jwt_secret=SECRET,
         jwt_issuer="test-issuer",
         jwt_audience="test-audience",
+        windows_client_artifact=str(artifact),
     )
     with TestClient(create_app(settings)) as test_client:
         yield test_client
