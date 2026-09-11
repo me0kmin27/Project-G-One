@@ -6,6 +6,10 @@
 
 GitHub Actions의 **Windows client executable** 작업이 Windows x64용 self-contained 패키지를 만들고 **GOne.Client-win-x64** artifact로 제공합니다. 대상 PC에는 .NET 설치가 필요 없습니다. Windows 개발 PC에서 같은 산출물을 만들려면 다음 명령을 실행합니다.
 
+PR이 `main`에 병합되면 배포 작업도 같은 artifact를 빌드하고 다운로드한 후 애플리케이션과
+함께 서버에 게시합니다. 따라서 웹의 클라이언트 배포 다운로드에는 병합된 커밋에서 만든
+실행 파일이 사용됩니다.
+
 ```powershell
 .\windows\publish.ps1
 ```
