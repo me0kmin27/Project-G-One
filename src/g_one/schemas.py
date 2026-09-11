@@ -259,6 +259,10 @@ class ClientBootstrapRequest(ApiModel):
     device_name: str = Field(min_length=1, max_length=128)
 
 
+class ClientVpnEnrollment(ClientBootstrapRequest):
+    pass
+
+
 class ClientFileShare(ApiModel):
     name: str
     unc_path: str
@@ -271,3 +275,40 @@ class ClientBootstrap(ApiModel):
     vpn_profile: str | None = None
     file_shares: list[ClientFileShare] = Field(default_factory=list)
     device: DeviceRead
+
+
+class FileServerCreate(ApiModel):
+    name: str = Field(min_length=1, max_length=128)
+    host: str = Field(min_length=1, max_length=255)
+    shares: list[str] = Field(min_length=1, max_length=100)
+
+
+class FileServerRead(ApiModel):
+    id: str
+    name: str
+    host: str
+    shares: list[str]
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class DeploymentProfileCreate(ApiModel):
+    name: str = Field(min_length=1, max_length=128)
+    vpn_network_id: str
+    allowed_ips: str = Field(min_length=1, max_length=1024)
+    file_server_ids: list[str] = Field(min_length=1, max_length=100)
+    target_subjects: list[str] = Field(min_length=1, max_length=1000)
+
+
+class DeploymentProfileRead(ApiModel):
+    id: str
+    name: str
+    vpn_network_id: str
+    allowed_ips: str
+    file_server_ids: list[str]
+    target_subjects: list[str]
+    revision: int
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime

@@ -15,6 +15,7 @@ class Settings:
     wireguard_interface: str = "wg0"
     wireguard_config_path: str = "/etc/wireguard/wg0.conf"
     wireguard_apply: bool = False
+    windows_client_artifact: str = "windows/dist/win-x64/GOne.Client.exe"
 
     @classmethod
     def from_environment(cls) -> "Settings":
@@ -30,6 +31,9 @@ class Settings:
             wireguard_interface=os.getenv("G_ONE_WIREGUARD_INTERFACE", defaults.wireguard_interface),
             wireguard_config_path=os.getenv("G_ONE_WIREGUARD_CONFIG_PATH", defaults.wireguard_config_path),
             wireguard_apply=os.getenv("G_ONE_WIREGUARD_APPLY", "false").lower() in {"1", "true", "yes"},
+            windows_client_artifact=os.getenv(
+                "G_ONE_WINDOWS_CLIENT_ARTIFACT", defaults.windows_client_artifact
+            ),
         )
         if settings.environment != "development" and settings.jwt_secret == defaults.jwt_secret:
             raise RuntimeError("G_ONE_JWT_SECRET must be set outside development")
