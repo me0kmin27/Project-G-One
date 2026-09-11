@@ -83,9 +83,10 @@ IP forwarding, 방화벽 및 NAT 정책을 별도로 구성해야 합니다. 이
 ```
 
 `GOne.Client.exe`가 포함된 self-contained Windows x64 패키지는 GitHub Actions artifact로
-제공되며 대상 PC에 .NET 런타임을 별도로 설치할 필요가 없습니다. 현재 클라이언트는 시스템 권한 경계를 우회하지 않도록 WireGuard/SMB 명령을 직접 실행하지
-않습니다. 해당 자동 구성은 서명된 정책과 제한된 IPC를 사용하는 Windows Service 단계에서
-연결해야 합니다. 자세한 빌드 방법과 범위는 `windows/README.md`를 참고하십시오.
+제공되며 대상 PC에 .NET 런타임이나 VPN 프로그램을 별도로 내려받을 필요가 없습니다.
+공식 WireGuard 런타임은 단일 EXE에 내장되며 최초 로그인 시 필요한 경우에만 관리자 승인
+후 자동 준비됩니다. 로그인 뒤 장치 전용 터널을 연결하고 로그아웃 또는 종료 시 정리합니다.
+자세한 빌드 방법과 범위는 `windows/README.md`를 참고하십시오.
 
 ### Docker Compose + MariaDB 배포
 

@@ -20,7 +20,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         settings = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "clientsettings.json")));
-        vpn = new WindowsVpnManager(settings!.wireguardPath);
+        vpn = new WindowsVpnManager();
         policyTimer.Interval = TimeSpan.FromSeconds(15);
         policyTimer.Tick += async (_, _) => await SynchronizePolicy();
     }
@@ -104,7 +104,7 @@ public partial class MainWindow : Window
     protected override void OnClosed(EventArgs e) { policyTimer.Stop(); vpn?.DisconnectAsync().GetAwaiter().GetResult(); accessToken = null; client?.Dispose(); base.OnClosed(e); }
     private sealed record SessionToken(string access_token);
     private sealed record Principal(string subject, string tenant_id, string[] roles);
-    private sealed record ClientSettings(string serverUrl, string workspace, string wireguardPath);
+    private sealed record ClientSettings(string serverUrl, string workspace);
     private sealed record VpnEnrollment(string? client_config);
     private sealed record ClientPolicy(int version, UserPolicy user, VpnPolicy? vpn, Device[] devices);
     private sealed record UserPolicy(string allowed_ips);

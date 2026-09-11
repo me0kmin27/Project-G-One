@@ -20,8 +20,8 @@ IDE나 CI에서 아래 표준 명령을 직접 실행해도 같은 EXE를 만들
 dotnet publish windows/GOne.Client/GOne.Client.csproj -c Release -o windows/dist/win-x64
 ```
 
-대상 PC에는 공식 WireGuard for Windows가 설치되어 있어야 합니다. 로그인하면 클라이언트가
-장치용 키를 새로 등록하고 `wireguard.exe /installtunnelservice`로 `GOne` 터널을 즉시
-연결합니다. 로그아웃하거나 창을 닫으면 터널 서비스를 제거합니다. WireGuard 경로가 기본
-설치 위치와 다르면 `clientsettings.json`의 `wireguardPath`를 변경하십시오. 터널 서비스
-설치 권한이 없는 PC에서는 Windows 관리자 승인 또는 관리형 설치 정책이 필요합니다.
+별도의 VPN 프로그램을 내려받거나 미리 설치할 필요가 없습니다. 게시 과정에서 공식
+WireGuard 런타임 설치기를 `GOne.Client.exe` 안에 포함합니다. 첫 VPN 연결 때 런타임이 없는
+PC에서만 내장 설치기를 꺼내 Windows 관리자 승인을 거쳐 자동 준비하고, 이어서 장치용 키를
+등록해 `GOne` 터널을 즉시 연결합니다. 이후 로그인에는 설치 과정이 반복되지 않습니다.
+로그아웃하거나 창을 닫으면 터널 서비스를 제거합니다.
