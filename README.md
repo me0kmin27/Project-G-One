@@ -7,6 +7,7 @@ Python 웹 관리 환경에서 운영하기 위한 중앙관리형 플랫폼입�
 > 이 문서는 프로젝트의 첫 진입점입니다. 프로젝트의 상세 방향과 의사결정 기준은
 > [프로젝트 방향 문서](docs/PROJECT_DIRECTION.md)에서 관리합니다. Windows 프로그램의 상세
 > 기준은 [Windows 클라이언트 및 서비스 요구사항](docs/WINDOWS_CLIENT_AND_SERVICE_REQUIREMENTS.md)을 따릅니다.
+> 구현 완료 범위, 회귀 기준과 다음 작업은 [구현 현황](docs/IMPLEMENTATION_STATUS.md)에 계속 기록합니다.
 
 ## 현재 상태
 
