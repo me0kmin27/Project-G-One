@@ -116,12 +116,18 @@ def test_admin_manages_workspace_users_roles_and_tokens(client, auth):
     login = client.post("/api/v1/session/login", json={"subject": "alice", "tenant_id": "acme", "password": "correct-horse"})
     assert login.status_code == 200
     user_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
-    policy = client.get("/api/v1/client/policy", headers=user_headers)
-    assert policy.status_code == 200
-    assert policy.json()["user"]["subject"] == "alice"
-    assert policy.json()["user"]["vpn_address"] == "10.77.0.10/32"
-    assert policy.json()["user"]["allowed_ips"] == "10.77.0.0/24"
-    assert policy.json()["vpn"]["endpoint"] == "vpn.acme.test"
+    client.app.state.settings.wireguard_private_key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    assert client.post("/api/v1/client/bootstrap", json={"device_name": "ALICE-PC"}).status_code == 401
+    bootstrap = client.post(
+        "/api/v1/client/bootstrap", json={"device_name": "ALICE-PC"}, headers=user_headers
+    )
+    assert bootstrap.status_code == 200
+    assert bootstrap.json()["user"]["subject"] == "alice"
+    assert bootstrap.json()["vpn"]["endpoint"] == "vpn.acme.test"
+    assert bootstrap.json()["device"]["name"] == "ALICE-PC"
+    assert bootstrap.json()["file_shares"] == []
+    assert "PrivateKey = " in bootstrap.json()["vpn_profile"]
+    assert "Endpoint = vpn.acme.test:51820" in bootstrap.json()["vpn_profile"]
 
     client.app.state.settings.wireguard_private_key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     enrollment = client.post(

@@ -255,13 +255,19 @@ class VpnPeerEnrollment(VpnPeerRead):
     client_config: str | None = None
 
 
-class ClientVpnEnrollment(ApiModel):
+class ClientBootstrapRequest(ApiModel):
     device_name: str = Field(min_length=1, max_length=128)
 
 
-class ClientPolicy(ApiModel):
+class ClientFileShare(ApiModel):
+    name: str
+    unc_path: str
+
+
+class ClientBootstrap(ApiModel):
     version: int
-    poll_interval_seconds: int = 15
     user: UserRead
     vpn: VpnNetworkRead | None
-    devices: list[DeviceRead]
+    vpn_profile: str | None = None
+    file_shares: list[ClientFileShare] = Field(default_factory=list)
+    device: DeviceRead

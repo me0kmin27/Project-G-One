@@ -20,8 +20,8 @@ from .schemas import (
     ApiTokenCreate,
     ApiTokenIssued,
     ApiTokenRead,
-    ClientPolicy,
-    ClientVpnEnrollment,
+    ClientBootstrap,
+    ClientBootstrapRequest,
     ConsoleSessionCreate,
     DeviceCreate,
     DeviceRead,
@@ -296,18 +296,71 @@ def update_user(user_id: str, body: UserUpdate, principal: ProvisionedPrincipal,
     return user
 
 
-@router.get("/api/v1/client/policy", response_model=ClientPolicy)
-def read_client_policy(request: Request, principal: ProvisionedPrincipal, session: DatabaseSession):
-    user = session.scalar(select(WorkspaceUser).where(WorkspaceUser.tenant_id == principal.tenant_id, WorkspaceUser.subject == principal.subject, WorkspaceUser.status == "active"))
+@router.post("/api/v1/client/bootstrap", response_model=ClientBootstrap)
+def bootstrap_client(
+    body: ClientBootstrapRequest,
+    request: Request,
+    principal: ProvisionedPrincipal,
+    session: DatabaseSession,
+):
+    """Return all device settings only after bearer-token authentication."""
+    user = session.scalar(select(WorkspaceUser).where(
+        WorkspaceUser.tenant_id == principal.tenant_id,
+        WorkspaceUser.subject == principal.subject,
+        WorkspaceUser.status == "active",
+    ))
     if user is None:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "active provisioned account required")
+
+    device = session.scalar(select(Device).where(
+        Device.tenant_id == principal.tenant_id,
+        Device.owner_id == principal.subject,
+        Device.name == body.device_name,
+        Device.revoked_at.is_(None),
+    ))
+    if device is None:
+        device = Device(tenant_id=principal.tenant_id, owner_id=principal.subject, name=body.device_name)
+        session.add(device)
+
     network = session.scalar(select(VpnNetwork).where(VpnNetwork.tenant_id == principal.tenant_id))
-    devices = session.scalars(select(Device).where(Device.tenant_id == principal.tenant_id, Device.owner_id == principal.subject)).all()
-    return ClientPolicy(
+    settings = request.app.state.settings
+    vpn_profile = None
+    if network and user.vpn_address and settings.wireguard_private_key:
+        address = address_belongs(network.address_cidr, user.vpn_address)
+        routes = normalize_allowed_ips(
+            user.allowed_ips or str(ipaddress.ip_interface(network.address_cidr).network)
+        )
+        private_key, peer_public_key = generate_keypair()
+        peer = session.scalar(select(VpnPeer).where(
+            VpnPeer.tenant_id == principal.tenant_id,
+            VpnPeer.network_id == network.id,
+            VpnPeer.address == address,
+        ))
+        if peer is None:
+            peer = VpnPeer(tenant_id=principal.tenant_id, network_id=network.id, address=address)
+            session.add(peer)
+        peer.name = f"client:{principal.subject}:{body.device_name}"
+        peer.public_key = peer_public_key
+        peer.allowed_ips = routes
+        peer.persistent_keepalive = 25
+        peer.enabled = True
+        peer.revoked_at = None
+        session.flush()
+        sync_vpn(session, network, request)
+        vpn_profile = render_client_config(
+            network, private_key, address, public_key(settings.wireguard_private_key), routes
+        )
+
+    session.flush()
+    audit(session, principal, "client.bootstrapped", "device", device.id, vpn=bool(vpn_profile))
+    session.commit()
+    return ClientBootstrap(
         version=user.policy_version,
         user=UserRead.model_validate(user),
         vpn=network_response(network, request) if network else None,
-        devices=list(devices),
+        vpn_profile=vpn_profile,
+        file_shares=[],
+        device=DeviceRead.model_validate(device),
     )
 
 
