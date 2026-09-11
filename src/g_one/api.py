@@ -148,25 +148,6 @@ def create_user_session(
             WorkspaceUser.status == "active",
         )
     )
-    if user is None:
-        claimed = session.execute(
-            update(InstallationState)
-            .where(InstallationState.id == 1, InstallationState.initialized.is_(False))
-            .values(initialized=True)
-        )
-        if claimed.rowcount == 1:
-            user = WorkspaceUser(
-                tenant_id=tenant_id,
-                subject=subject,
-                display_name=subject,
-                password_hash=hash_password(body.password),
-                roles=["tenant_admin"],
-            )
-            session.add(user)
-            session.flush()
-            principal = Principal(user.subject, user.tenant_id, frozenset(user.roles))
-            audit(session, principal, "installation.admin_created", "user", user.id)
-            session.commit()
     if user is None or not verify_password(body.password, user.password_hash):
         session.rollback()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid account credentials")

@@ -3,7 +3,7 @@ import base64
 import os
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class Settings:
     database_url: str = "sqlite:///./g-one.db"
     jwt_secret: str = "development-only-secret-change-me"
