@@ -37,8 +37,8 @@ def token(subject: str, tenant: str, roles: list[str] | None = None) -> str:
 
 @pytest.fixture
 def client(tmp_path):
-    artifact = tmp_path / "GOne.Client.exe"
-    artifact.write_bytes(b"MZ-test-client")
+    artifact = tmp_path / "GOne.Client-x64.msi"
+    artifact.write_bytes(b"MSI-test-client")
     settings = Settings(
         database_url=f"sqlite:///{tmp_path / 'test.db'}",
         jwt_secret=SECRET,
