@@ -41,6 +41,8 @@ public partial class MainWindow : Window
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
             var me = await client.GetFromJsonAsync<Principal>("api/v1/me");
             WelcomeText.Text = $"{me!.subject} · {me.tenant_id}";
+            await SynchronizePolicy();
+            await ConnectVpn();
             PasswordBox.Clear();
             LoginPanel.Visibility = Visibility.Collapsed;
             DashboardPanel.Visibility = Visibility.Visible;
