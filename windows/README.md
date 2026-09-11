@@ -1,31 +1,45 @@
 # G-One Windows Client
 
-.NET 8 WPF 기반 테스트베드 클라이언트입니다. 운영자가 배포 전에 `clientsettings.json`에 서버 URL과 워크스페이스를 지정하므로 사용자는 **계정과 암호만** 입력합니다. 액세스 토큰은 프로세스 메모리에만 유지합니다. 클라이언트는 먼저 로그인을 완료하고, 인증된 뒤에만 서버 부트스트랩 API에서 장치 정책, WireGuard 프로필과 허가된 파일 공유 설정을 자동으로 받습니다.
+.NET 8 WPF 기반 테스트베드 클라이언트입니다. 운영자가 배포 전에
+`clientsettings.json`에 서버 URL과 워크스페이스를 지정하므로 사용자는 **계정과 암호만**
+입력합니다. 액세스 토큰은 프로세스 메모리에만 유지합니다. 인증 후 서버 부트스트랩 API에서
+장치 정책, WireGuard 프로필과 허가된 파일 공유 설정을 자동으로 받습니다.
 
-## 바로 테스트할 EXE 만들기
+## 모든 구성 요소를 포함한 MSI 만들기
 
-GitHub Actions의 **Windows client executable** 작업이 Windows x64용 self-contained 패키지를 만들고 **GOne.Client-win-x64** artifact로 제공합니다. 대상 PC에는 .NET 설치가 필요 없습니다. Windows 개발 PC에서 같은 산출물을 만들려면 다음 명령을 실행합니다.
+GitHub Actions의 **Windows client MSI** 작업은 Windows x64용 `GOne.Client-x64.msi`를
+만들고 **GOne.Client-MSI-win-x64** artifact로 제공합니다. MSI에는 self-contained .NET 8
+클라이언트, 기본 설정과 공식 WireGuard 런타임 설치기가 모두 포함되므로 대상 PC에서 별도의
+.NET 또는 VPN 프로그램을 준비할 필요가 없습니다.
 
-PR이 `main`에 병합되면 배포 작업도 같은 artifact를 빌드하고 다운로드한 후 애플리케이션과
-함께 서버에 게시합니다. 따라서 웹의 클라이언트 배포 다운로드에는 병합된 커밋에서 만든
-실행 파일이 사용됩니다.
+Windows 개발 PC에서는 .NET 8 SDK와 인터넷 연결을 준비하고 다음 명령을 실행합니다.
 
 ```powershell
 .\windows\publish.ps1
 ```
 
-실행 파일은 `windows\dist\win-x64\GOne.Client.exe`에 생성됩니다. 함께 생성된 `clientsettings.json`의 `serverUrl`과 `workspace`를 배포 환경에 맞게 수정하고 EXE와 같은 폴더에 둡니다.
+스크립트는 클라이언트를 self-contained single-file로 게시하고 공식 WireGuard 설치기를
+내려받은 다음 WiX Toolset 프로젝트로 MSI를 만듭니다. WiX SDK는 `dotnet build`가 NuGet에서
+자동 복원합니다. 결과 파일은 `windows\dist\win-x64\GOne.Client-x64.msi`입니다.
 
-Release 게시 설정(Windows x64, self-contained, single-file)은 프로젝트 파일에 포함되어 있어
-IDE나 CI에서 아래 표준 명령을 직접 실행해도 같은 EXE를 만들 수 있습니다. 빌드 머신의 운영
-체제와 관계없이 .NET 8 SDK가 필요합니다.
+## 설치와 제거
 
-```console
-dotnet publish windows/GOne.Client/GOne.Client.csproj -c Release -o windows/dist/win-x64
+MSI는 관리자 권한으로 다음 항목을 설치합니다.
+
+- `%ProgramFiles%\G-One\GOne.Client.exe`와 `clientsettings.json`
+- 시작 메뉴의 **G-One Client** 바로 가기
+- 터널 관리에 필요한 공식 WireGuard Windows 런타임
+
+대화형 설치는 MSI를 더블 클릭하고, 관리형 무인 배포는 다음과 같이 실행합니다.
+
+```powershell
+msiexec /i GOne.Client-x64.msi /qn
 ```
 
-별도의 VPN 프로그램을 내려받거나 미리 설치할 필요가 없습니다. 게시 과정에서 공식
-WireGuard 런타임 설치기를 `GOne.Client.exe` 안에 포함합니다. 첫 VPN 연결 때 런타임이 없는
-PC에서만 내장 설치기를 꺼내 Windows 관리자 승인을 거쳐 자동 준비하고, 이어서 장치용 키를
-등록해 `GOne` 터널을 즉시 연결합니다. 이후 로그인에는 설치 과정이 반복되지 않습니다.
-로그아웃하거나 창을 닫으면 터널 서비스를 제거합니다.
+WireGuard 설치가 실패하면 MSI도 성공으로 처리되지 않습니다. 설치가 끝난 뒤에는 첫 로그인
+때 별도 설치나 다운로드가 발생하지 않습니다. 클라이언트는 장치용 키를 등록해 `GOne`
+터널을 연결하고 로그아웃하거나 창을 닫으면 터널 서비스를 제거합니다.
+
+G-One Client는 **앱 및 기능** 또는 `msiexec /x GOne.Client-x64.msi`로 제거할 수 있습니다.
+WireGuard는 다른 프로그램도 사용할 수 있는 공유 시스템 구성 요소이므로 클라이언트를
+제거할 때 함께 제거하지 않습니다.

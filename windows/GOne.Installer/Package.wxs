@@ -1,0 +1,50 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="G-One Client"
+           Manufacturer="Project G-One"
+           Version="1.0.0"
+           UpgradeCode="65D38BEB-06D7-4F3E-A9DA-F4A92349E58D"
+           Scope="perMachine"
+           InstallerVersion="500"
+           Compressed="yes">
+    <SummaryInformation Description="G-One Windows client and required VPN runtime" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of G-One Client is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="G-One">
+        <Component Id="ClientFiles" Guid="64F8187F-3DE8-4C86-B941-6A61B8B36BDC" Bitness="always64">
+          <File Id="ClientExecutable" Source="$(var.PublishDir)\GOne.Client.exe" KeyPath="yes">
+            <Shortcut Id="ApplicationShortcut"
+                      Directory="ProgramMenuFolder"
+                      Name="G-One Client"
+                      WorkingDirectory="INSTALLFOLDER"
+                      Advertise="yes" />
+          </File>
+          <File Id="ClientSettings" Source="$(var.PublishDir)\clientsettings.json" />
+        </Component>
+        <Directory Id="DEPENDENCYFOLDER" Name="Dependencies">
+          <Component Id="WireGuardInstallerComponent" Guid="DEEE2AA4-EA2B-4862-A93A-9C85878E84D5" Bitness="always64">
+            <File Id="WireGuardInstaller" Source="$(var.WireGuardInstaller)" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Complete" Title="G-One Client" Level="1">
+      <ComponentRef Id="ClientFiles" />
+      <ComponentRef Id="WireGuardInstallerComponent" />
+    </Feature>
+
+    <!-- The official runtime installer is idempotent. Running it as a deferred,
+         elevated action ensures VPN support is ready before MSI reports success. -->
+    <CustomAction Id="InstallWireGuard"
+                  FileRef="WireGuardInstaller"
+                  ExeCommand="/install"
+                  Execute="deferred"
+                  Impersonate="no"
+                  Return="check" />
+    <InstallExecuteSequence>
+      <Custom Action="InstallWireGuard" After="InstallFiles" Condition="NOT Installed AND NOT REMOVE~=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>

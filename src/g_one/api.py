@@ -391,7 +391,7 @@ def download_client_deployment(
     }
     bundle = io.BytesIO()
     with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.write(artifact, "GOne.Client.exe")
+        archive.write(artifact, "GOne.Client-x64.msi")
         archive.writestr("deployment.json", json.dumps(manifest, ensure_ascii=False, indent=2))
     bundle.seek(0)
     audit(

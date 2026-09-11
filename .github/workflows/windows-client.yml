@@ -1,4 +1,4 @@
-name: Windows client executable
+name: Windows client MSI
 
 on:
   pull_request:
@@ -17,16 +17,15 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - name: Build self-contained EXE
+      - name: Build all-in-one MSI
         shell: pwsh
         run: ./windows/publish.ps1
       - name: Verify executable package
         shell: pwsh
         run: |
-          if (-not (Test-Path ./windows/dist/win-x64/GOne.Client.exe)) { throw "GOne.Client.exe was not produced" }
-          if (-not (Test-Path ./windows/dist/win-x64/clientsettings.json)) { throw "clientsettings.json was not produced" }
+          if (-not (Test-Path ./windows/dist/win-x64/GOne.Client-x64.msi)) { throw "GOne.Client-x64.msi was not produced" }
       - uses: actions/upload-artifact@v4
         with:
-          name: GOne.Client-win-x64
-          path: windows/dist/win-x64/
+          name: GOne.Client-MSI-win-x64
+          path: windows/dist/win-x64/GOne.Client-x64.msi
           if-no-files-found: error

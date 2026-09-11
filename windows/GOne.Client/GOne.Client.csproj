@@ -20,13 +20,5 @@
   </PropertyGroup>
   <ItemGroup>
     <None Update="clientsettings.json" CopyToOutputDirectory="PreserveNewest" />
-    <EmbeddedResource Include="$(IntermediateOutputPath)wireguard-installer.exe"
-                      LogicalName="GOne.Client.Resources.wireguard-installer.exe" />
   </ItemGroup>
-  <Target Name="AcquireWireGuardRuntime" BeforeTargets="PrepareForBuild"
-          Condition="!Exists('$(IntermediateOutputPath)wireguard-installer.exe')">
-    <MakeDir Directories="$(IntermediateOutputPath)" />
-    <DownloadFile SourceUrl="https://download.wireguard.com/windows-client/wireguard-installer.exe"
-                  DestinationFolder="$(IntermediateOutputPath)" />
-  </Target>
 </Project>
