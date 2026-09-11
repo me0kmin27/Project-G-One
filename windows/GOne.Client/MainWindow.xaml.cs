@@ -14,11 +14,15 @@ public partial class MainWindow : Window
     private string? accessToken; // Deliberately memory-only; never persisted.
     private readonly DispatcherTimer policyTimer = new();
     private ClientSettings? settings;
+    private WindowsVpnManager? vpn;
+    private bool vpnConnected;
+    private bool vpnConnectionInProgress;
 
     public MainWindow()
     {
         InitializeComponent();
         settings = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "clientsettings.json")));
+        vpn = new WindowsVpnManager();
         policyTimer.Interval = TimeSpan.FromSeconds(15);
         policyTimer.Tick += async (_, _) => await SynchronizePolicy();
     }
@@ -40,21 +44,52 @@ public partial class MainWindow : Window
             PasswordBox.Clear();
             LoginPanel.Visibility = Visibility.Collapsed;
             DashboardPanel.Visibility = Visibility.Visible;
-            await SynchronizePolicy();
+            ConnectionText.Text = "● 로그인됨 · 정책 확인 중";
             policyTimer.Start();
+            await SynchronizePolicy();
         }
-        catch (Exception ex) { LoginError.Text = $"연결 실패: {ex.Message}"; }
+        catch (Exception ex)
+        {
+            policyTimer.Stop();
+            accessToken = null;
+            client?.Dispose(); client = null;
+            LoginError.Text = $"로그인 실패: {ex.Message}";
+        }
         finally { LoginButton.IsEnabled = true; }
     }
 
-    private void Logout_Click(object sender, RoutedEventArgs e)
+    private async void Logout_Click(object sender, RoutedEventArgs e)
     {
         policyTimer.Stop();
+        if (vpn is not null) await vpn.DisconnectAsync();
+        vpnConnected = false;
         accessToken = null;
         client?.Dispose(); client = null;
         DevicesList.ItemsSource = null;
         DashboardPanel.Visibility = Visibility.Collapsed;
         LoginPanel.Visibility = Visibility.Visible;
+    }
+
+    private async Task ConnectVpn()
+    {
+        if (vpnConnectionInProgress) return;
+        vpnConnectionInProgress = true;
+        try
+        {
+            ConnectionText.Text = "● 로그인됨 · VPN 구성 중";
+            var response = await client!.PostAsJsonAsync("api/v1/client/vpn/enroll", new { device_name = Environment.MachineName });
+            response.EnsureSuccessStatusCode();
+            var enrollment = await response.Content.ReadFromJsonAsync<VpnEnrollment>();
+            if (string.IsNullOrWhiteSpace(enrollment?.client_config))
+                throw new InvalidOperationException("서버가 WireGuard 구성을 반환하지 않았습니다.");
+            await vpn!.ConnectAsync(enrollment.client_config);
+            vpnConnected = true;
+            ConnectionText.Text = "● 로그인됨 · VPN 연결됨";
+        }
+        finally
+        {
+            vpnConnectionInProgress = false;
+        }
     }
 
     private async Task SynchronizePolicy()
@@ -73,15 +108,27 @@ public partial class MainWindow : Window
             PolicyText.Text = policy?.vpn is null
                 ? $"정책 v{policy?.version} · VPN 미구성 · 다음 확인 15초 이내"
                 : $"정책 v{policy.version} · {policy.vpn.address_cidr} · 경로 {policy.user.allowed_ips} · 다음 확인 15초 이내";
-            ConnectionText.Text = "● 정책 최신 상태";
+            if (policy?.vpn is null)
+            {
+                ConnectionText.Text = "● 로그인됨 · VPN 미구성";
+            }
+            else if (!vpnConnected)
+            {
+                await ConnectVpn();
+            }
+            else
+            {
+                ConnectionText.Text = "● 로그인됨 · VPN 연결됨 · 정책 최신 상태";
+            }
         }
-        catch (Exception ex) { ConnectionText.Text = $"● 동기화 재시도 예정: {ex.Message}"; }
+        catch (Exception ex) { ConnectionText.Text = $"● 로그인됨 · VPN/정책 재시도 예정: {ex.Message}"; }
     }
 
-    protected override void OnClosed(EventArgs e) { policyTimer.Stop(); accessToken = null; client?.Dispose(); base.OnClosed(e); }
+    protected override void OnClosed(EventArgs e) { policyTimer.Stop(); vpn?.DisconnectAsync().GetAwaiter().GetResult(); accessToken = null; client?.Dispose(); base.OnClosed(e); }
     private sealed record SessionToken(string access_token);
     private sealed record Principal(string subject, string tenant_id, string[] roles);
     private sealed record ClientSettings(string serverUrl, string workspace);
+    private sealed record VpnEnrollment(string? client_config);
     private sealed record ClientPolicy(int version, UserPolicy user, VpnPolicy? vpn, Device[] devices);
     private sealed record UserPolicy(string allowed_ips);
     private sealed record VpnPolicy(string address_cidr);

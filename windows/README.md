@@ -20,4 +20,8 @@ IDE나 CI에서 아래 표준 명령을 직접 실행해도 같은 EXE를 만들
 dotnet publish windows/GOne.Client/GOne.Client.csproj -c Release -o windows/dist/win-x64
 ```
 
-현재 수직 슬라이스는 계정 로그인, 자동 장치 등록, 서버 정책 주기 동기화, VPN 주소·라우팅 표시와 명시적 로그아웃 시 메모리 세션 정리를 제공합니다. 실제 WireGuard/SMB 시스템 변경은 권한 분리 Windows Service와 서명된 정책 IPC가 준비된 뒤 연결하며 UI 프로세스에서 관리자 명령을 직접 실행하지 않습니다.
+별도의 VPN 프로그램을 내려받거나 미리 설치할 필요가 없습니다. 게시 과정에서 공식
+WireGuard 런타임 설치기를 `GOne.Client.exe` 안에 포함합니다. 첫 VPN 연결 때 런타임이 없는
+PC에서만 내장 설치기를 꺼내 Windows 관리자 승인을 거쳐 자동 준비하고, 이어서 장치용 키를
+등록해 `GOne` 터널을 즉시 연결합니다. 이후 로그인에는 설치 과정이 반복되지 않습니다.
+로그아웃하거나 창을 닫으면 터널 서비스를 제거합니다.
