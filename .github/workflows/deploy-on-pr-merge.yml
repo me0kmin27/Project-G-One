@@ -15,8 +15,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  package-windows-client:
+    if: github.event.pull_request.merged == true
+    runs-on: windows-latest
+    steps:
+      - name: Checkout merged code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build self-contained EXE
+        shell: pwsh
+        run: ./windows/publish.ps1
+      - name: Publish Windows client artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GOne.Client-win-x64
+          path: windows/dist/win-x64/
+          if-no-files-found: error
+
   deploy:
     if: github.event.pull_request.merged == true
+    needs: package-windows-client
     runs-on: ubuntu-latest
     environment: Project-G-One
 
@@ -25,6 +47,15 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      - name: Download Windows client artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: GOne.Client-win-x64
+          path: windows/dist/win-x64
+
+      - name: Verify Windows client artifact
+        run: test -s windows/dist/win-x64/GOne.Client.exe
 
       - name: Prepare SSH
         run: |
@@ -57,16 +88,19 @@ jobs:
             -p "${{ secrets.DEPLOY_PORT }}" \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             "cd '${{ secrets.DEPLOY_PATH }}' && \
+             test -s windows/dist/win-x64/GOne.Client.exe && \
              python3 scripts/ensure_compose_env.py && \
              docker compose up -d database --wait --wait-timeout 120 && \
              python3 -m scripts.sync_database_credentials && \
              (python3 scripts/manage_server.py start || \
               { docker compose ps; docker compose logs --tail 200; exit 1; })"
 
-      - name: Verify web application health
+      - name: Verify web application and published client
         run: |
           ssh \
             -i ~/.ssh/deploy_key \
             -p "${{ secrets.DEPLOY_PORT }}" \
             "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            "cd '${{ secrets.DEPLOY_PATH }}' && docker compose exec -T web python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=10).read()\""
+            "cd '${{ secrets.DEPLOY_PATH }}' && \
+             docker compose exec -T web test -s /opt/g-one/client/GOne.Client.exe && \
+             docker compose exec -T web python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/readyz', timeout=10).read()\""

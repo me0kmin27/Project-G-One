@@ -103,7 +103,9 @@ IP forwarding, 방화벽 및 NAT 정책을 별도로 구성해야 합니다. 이
 파일 서버와 대상 사용자를 하나의 배포 프로필로 게시할 수 있습니다. 할당된 사용자 또는
 관리자가 다운로드하면 서버에 게시된 `GOne.Client.exe`와 10분 후 만료되는 등록 정보가
 ZIP으로 제공됩니다. 배포 파일에는 VPN 개인 키나 SMB 암호를 포함하지 않습니다. Compose
-배포에서는 먼저 Windows 패키지를 `windows/dist/win-x64/GOne.Client.exe`에 게시해야 합니다.
+배포에서는 PR 병합 배포 작업이 Windows 패키지를 빌드하고
+`windows/dist/win-x64/GOne.Client.exe`에 게시한 뒤 서버를 재시작합니다. 수동 배포에서는
+서버를 시작하기 전에 같은 경로에 Windows 패키지를 게시해야 합니다.
 
 ### Docker Compose + MariaDB 배포
 
