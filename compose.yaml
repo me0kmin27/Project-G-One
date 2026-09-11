@@ -46,7 +46,7 @@ services:
       - "${G_ONE_WIREGUARD_PORT:-51820}:${G_ONE_WIREGUARD_PORT:-51820}/udp"
     volumes:
       - g-one-wireguard:/etc/wireguard
-      - ./windows/dist/win-x64:/opt/g-one/client:ro
+      - ./.deploy/windows-client:/opt/g-one/client:ro
     depends_on:
       database:
         condition: service_healthy
