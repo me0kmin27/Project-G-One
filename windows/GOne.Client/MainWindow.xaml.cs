@@ -1,26 +1,21 @@
 using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text.Json;
 using System.Windows;
-using System.Windows.Threading;
 
 namespace GOne.Client;
 
 public partial class MainWindow : Window
 {
-    private HttpClient? client;
-    private string? accessToken; // Deliberately memory-only; never persisted.
-    private readonly DispatcherTimer policyTimer = new();
-    private ClientSettings? settings;
+    private readonly ClientSettings settings;
+    private readonly WindowsConnectionManager connections = new();
+    private GOneApiClient? api;
 
     public MainWindow()
     {
         InitializeComponent();
-        settings = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "clientsettings.json")));
-        policyTimer.Interval = TimeSpan.FromSeconds(15);
-        policyTimer.Tick += async (_, _) => await SynchronizePolicy();
+        settings = JsonSerializer.Deserialize<ClientSettings>(
+            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "clientsettings.json")))
+            ?? throw new InvalidOperationException("clientsettings.json을 읽을 수 없습니다.");
     }
 
     private async void Login_Click(object sender, RoutedEventArgs e)
@@ -29,61 +24,66 @@ public partial class MainWindow : Window
         LoginError.Text = "";
         try
         {
-            client?.Dispose();
-            client = new HttpClient { BaseAddress = new Uri(settings!.serverUrl.TrimEnd('/') + "/") };
-            var response = await client.PostAsJsonAsync("api/v1/session/login", new { subject = SubjectBox.Text, tenant_id = settings.workspace, password = PasswordBox.Password });
-            response.EnsureSuccessStatusCode();
-            accessToken = (await response.Content.ReadFromJsonAsync<SessionToken>())!.access_token;
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            var me = await client.GetFromJsonAsync<Principal>("api/v1/me");
-            WelcomeText.Text = $"{me!.subject} · {me.tenant_id}";
-            PasswordBox.Clear();
-            LoginPanel.Visibility = Visibility.Collapsed;
-            DashboardPanel.Visibility = Visibility.Visible;
-            await SynchronizePolicy();
-            policyTimer.Start();
+            api?.Dispose();
+            api = new GOneApiClient(settings.serverUrl, settings.workspace);
+
+            // Authentication is deliberately completed before any device configuration request.
+            var principal = await api.LoginAsync(SubjectBox.Text, PasswordBox.Password);
+            ShowAuthenticatedSession(principal);
+            await ConfigureDeviceAsync();
         }
-        catch (Exception ex) { LoginError.Text = $"연결 실패: {ex.Message}"; }
-        finally { LoginButton.IsEnabled = true; }
+        catch (Exception ex)
+        {
+            api?.Dispose();
+            api = null;
+            LoginError.Text = $"로그인 실패: {ex.Message}";
+        }
+        finally
+        {
+            LoginButton.IsEnabled = true;
+        }
     }
 
-    private void Logout_Click(object sender, RoutedEventArgs e)
+    private void ShowAuthenticatedSession(Principal principal)
     {
-        policyTimer.Stop();
-        accessToken = null;
-        client?.Dispose(); client = null;
+        WelcomeText.Text = $"{principal.subject} · {principal.tenant_id}";
+        PasswordBox.Clear();
+        LoginPanel.Visibility = Visibility.Collapsed;
+        DashboardPanel.Visibility = Visibility.Visible;
+        ConnectionText.Text = "● 로그인됨 · 서버 설정 요청 중";
+    }
+
+    private async Task ConfigureDeviceAsync()
+    {
+        try
+        {
+            var bootstrap = await api!.BootstrapAsync();
+            DevicesList.ItemsSource = new[] { bootstrap.device };
+            PolicyText.Text = $"정책 v{bootstrap.version} · 경로 {bootstrap.user.allowed_ips}";
+            ConnectionText.Text = $"● 로그인됨 · {await connections.ApplyAsync(bootstrap)}";
+        }
+        catch (Exception ex)
+        {
+            ConnectionText.Text = $"● 로그인됨 · 자동 설정 실패: {ex.Message}";
+        }
+    }
+
+    private async void Logout_Click(object sender, RoutedEventArgs e)
+    {
+        await connections.ClearAsync();
+        api?.Dispose();
+        api = null;
         DevicesList.ItemsSource = null;
         DashboardPanel.Visibility = Visibility.Collapsed;
         LoginPanel.Visibility = Visibility.Visible;
     }
 
-    private async Task SynchronizePolicy()
+    protected override void OnClosed(EventArgs e)
     {
-        if (client is null) return;
-        try
-        {
-            var policy = await client.GetFromJsonAsync<ClientPolicy>("api/v1/client/policy");
-            if (policy is null) return;
-            if (!policy.devices.Any(device => device.name.Equals(Environment.MachineName, StringComparison.OrdinalIgnoreCase)))
-            {
-                await client.PostAsJsonAsync("api/v1/devices", new { name = Environment.MachineName });
-                policy = await client.GetFromJsonAsync<ClientPolicy>("api/v1/client/policy");
-            }
-            DevicesList.ItemsSource = policy?.devices;
-            PolicyText.Text = policy?.vpn is null
-                ? $"정책 v{policy?.version} · VPN 미구성 · 다음 확인 15초 이내"
-                : $"정책 v{policy.version} · {policy.vpn.address_cidr} · 경로 {policy.user.allowed_ips} · 다음 확인 15초 이내";
-            ConnectionText.Text = "● 정책 최신 상태";
-        }
-        catch (Exception ex) { ConnectionText.Text = $"● 동기화 재시도 예정: {ex.Message}"; }
+        connections.ClearAsync().GetAwaiter().GetResult();
+        api?.Dispose();
+        base.OnClosed(e);
     }
 
-    protected override void OnClosed(EventArgs e) { policyTimer.Stop(); accessToken = null; client?.Dispose(); base.OnClosed(e); }
-    private sealed record SessionToken(string access_token);
-    private sealed record Principal(string subject, string tenant_id, string[] roles);
     private sealed record ClientSettings(string serverUrl, string workspace);
-    private sealed record ClientPolicy(int version, UserPolicy user, VpnPolicy? vpn, Device[] devices);
-    private sealed record UserPolicy(string allowed_ips);
-    private sealed record VpnPolicy(string address_cidr);
-    private sealed record Device(string name);
 }
