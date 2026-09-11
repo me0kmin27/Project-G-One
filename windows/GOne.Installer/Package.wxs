@@ -6,7 +6,7 @@
            Scope="perMachine"
            InstallerVersion="500"
            Compressed="yes">
-    <SummaryInformation Description="G-One Windows client and required VPN runtime" />
+    <SummaryInformation Description="G-One Windows client with integrated VPN runtime" />
     <MajorUpgrade DowngradeErrorMessage="A newer version of G-One Client is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
@@ -22,9 +22,10 @@
           </File>
           <File Id="ClientSettings" Source="$(var.PublishDir)\clientsettings.json" />
         </Component>
-        <Directory Id="DEPENDENCYFOLDER" Name="Dependencies">
-          <Component Id="WireGuardInstallerComponent" Guid="DEEE2AA4-EA2B-4862-A93A-9C85878E84D5" Bitness="always64">
-            <File Id="WireGuardInstaller" Source="$(var.WireGuardInstaller)" KeyPath="yes" />
+        <Directory Id="VPNFOLDER" Name="Vpn">
+          <Component Id="WireGuardRuntimeComponent" Guid="DEEE2AA4-EA2B-4862-A93A-9C85878E84D5" Bitness="always64">
+            <File Id="WireGuardExecutable" Source="$(var.WireGuardRuntimeDir)\wireguard.exe" KeyPath="yes" />
+            <File Id="WireGuardCommandLine" Source="$(var.WireGuardRuntimeDir)\wg.exe" />
           </Component>
         </Directory>
       </Directory>
@@ -32,19 +33,7 @@
 
     <Feature Id="Complete" Title="G-One Client" Level="1">
       <ComponentRef Id="ClientFiles" />
-      <ComponentRef Id="WireGuardInstallerComponent" />
+      <ComponentRef Id="WireGuardRuntimeComponent" />
     </Feature>
-
-    <!-- The official runtime installer is idempotent. Running it as a deferred,
-         elevated action ensures VPN support is ready before MSI reports success. -->
-    <CustomAction Id="InstallWireGuard"
-                  FileRef="WireGuardInstaller"
-                  ExeCommand="/install"
-                  Execute="deferred"
-                  Impersonate="no"
-                  Return="check" />
-    <InstallExecuteSequence>
-      <Custom Action="InstallWireGuard" After="InstallFiles" Condition="NOT Installed AND NOT REMOVE~=&quot;ALL&quot;" />
-    </InstallExecuteSequence>
   </Package>
 </Wix>

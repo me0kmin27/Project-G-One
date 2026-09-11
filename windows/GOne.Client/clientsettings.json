@@ -1,5 +1,4 @@
 {
   "serverUrl": "https://g-one.example.com/",
-  "workspace": "default",
-  "wireguardPath": "C:\\Program Files\\WireGuard\\wireguard.exe"
+  "workspace": "default"
 }

@@ -93,9 +93,9 @@ IP forwarding, 방화벽 및 NAT 정책을 별도로 구성해야 합니다. 이
 .\windows\publish.ps1
 ```
 
-`GOne.Client-x64.msi`는 self-contained Windows x64 클라이언트, 설정 파일과 공식
-WireGuard 런타임을 한 번에 설치합니다. 대상 PC에 .NET 런타임이나 VPN 프로그램을 별도로
-준비할 필요가 없고 설치 후 시작 메뉴에서 바로 실행할 수 있습니다. 로그인 뒤 장치 전용
+`GOne.Client-x64.msi`는 self-contained Windows x64 클라이언트, 설정 파일과 G-One 전용
+WireGuard 런타임을 한 번에 설치합니다. 별도의 WireGuard 제품 설치기를 실행하지 않으므로
+대상 PC에 .NET 런타임이나 VPN 프로그램을 따로 준비할 필요가 없습니다. 로그인 뒤 장치 전용
 터널을 연결하고 로그아웃 또는 종료 시 정리합니다.
 자세한 빌드 방법과 범위는 `windows/README.md`를 참고하십시오.
 

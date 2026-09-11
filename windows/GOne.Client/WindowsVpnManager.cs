@@ -6,8 +6,10 @@ namespace GOne.Client;
 internal sealed class WindowsVpnManager
 {
     private const string TunnelName = "GOne";
+    // G-One ships a private copy of the official runtime. Do not depend on, or
+    // modify, a separately installed WireGuard desktop application.
     private static readonly string WireGuardPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WireGuard", "wireguard.exe");
+        AppContext.BaseDirectory, "Vpn", "wireguard.exe");
 
     public async Task ConnectAsync(string configuration)
     {
@@ -15,7 +17,7 @@ internal sealed class WindowsVpnManager
             throw new PlatformNotSupportedException("VPN 연결은 Windows에서만 지원됩니다.");
         if (!File.Exists(WireGuardPath))
             throw new InvalidOperationException(
-                "WireGuard 런타임을 찾을 수 없습니다. G-One Client MSI를 복구하거나 다시 설치하십시오.");
+                "G-One VPN 구성 요소를 찾을 수 없습니다. G-One Client를 복구하거나 다시 설치하십시오.");
 
         var directory = Path.Combine(Path.GetTempPath(), "GOne");
         Directory.CreateDirectory(directory);

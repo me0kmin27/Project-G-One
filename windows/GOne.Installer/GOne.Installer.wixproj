@@ -5,9 +5,9 @@
     <InstallerPlatform>x64</InstallerPlatform>
     <OutputName>GOne.Client-x64</OutputName>
     <PublishDir Condition="'$(PublishDir)' == ''">$(MSBuildThisFileDirectory)..\dist\publish</PublishDir>
-    <WireGuardInstaller Condition="'$(WireGuardInstaller)' == ''">$(MSBuildThisFileDirectory)..\dist\dependencies\wireguard-installer.exe</WireGuardInstaller>
+    <WireGuardRuntimeDir Condition="'$(WireGuardRuntimeDir)' == ''">$(MSBuildThisFileDirectory)..\dist\wireguard</WireGuardRuntimeDir>
     <!-- WiX preprocessor variables are not created automatically from MSBuild
          properties. Explicitly export the paths consumed by Package.wxs. -->
-    <DefineConstants>$(DefineConstants);PublishDir=$(PublishDir);WireGuardInstaller=$(WireGuardInstaller)</DefineConstants>
+    <DefineConstants>$(DefineConstants);PublishDir=$(PublishDir);WireGuardRuntimeDir=$(WireGuardRuntimeDir)</DefineConstants>
   </PropertyGroup>
 </Project>
