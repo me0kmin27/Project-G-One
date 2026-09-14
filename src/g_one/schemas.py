@@ -257,6 +257,7 @@ class VpnPeerEnrollment(VpnPeerRead):
 
 class ClientBootstrapRequest(ApiModel):
     device_name: str = Field(min_length=1, max_length=128)
+    enrollment_code: str | None = Field(default=None, min_length=32, max_length=256)
 
 
 class ClientVpnEnrollment(ClientBootstrapRequest):

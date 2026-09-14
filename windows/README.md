@@ -32,7 +32,12 @@ MSI는 관리자 권한으로 다음 항목을 설치합니다.
 - 시작 메뉴의 **G-One Client** 바로 가기
 - `%ProgramFiles%\G-One\Vpn`의 G-One 전용 WireGuard Windows 런타임
 
-대화형 설치는 MSI를 더블 클릭하고, 관리형 무인 배포는 다음과 같이 실행합니다.
+웹에서 받은 배포 ZIP은 먼저 압축을 푼 뒤 **`Install-GOne.cmd`를 실행**합니다. 이 설치
+런처가 MSI 설치와 함께 서버 URL, 워크스페이스 및 사용자에게 할당된 배포 프로필을
+`%ProgramData%\G-One\clientsettings.json`에 적용합니다. ZIP 안의 MSI만 직접 실행하면
+공통 패키지의 기본 설정만 설치되므로 웹 배포에는 반드시 런처를 사용해야 합니다.
+
+공통 MSI의 관리형 무인 배포는 다음과 같이 실행합니다.
 
 ```powershell
 msiexec /i GOne.Client-x64.msi /qn

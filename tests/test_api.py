@@ -175,7 +175,13 @@ def test_admin_assigns_web_client_download_to_user(client, auth):
     )
     assert client.post(
         "/api/v1/users",
-        json={"subject": "alice", "display_name": "Alice", "password": "correct-horse", "roles": ["member"]},
+        json={
+            "subject": "alice",
+            "display_name": "Alice",
+            "password": "correct-horse",
+            "roles": ["member"],
+            "vpn_address": "10.70.0.10/32",
+        },
         headers=admin,
     ).status_code == 201
     server = client.post(
@@ -216,12 +222,37 @@ def test_admin_assigns_web_client_download_to_user(client, auth):
     with zipfile.ZipFile(io.BytesIO(downloaded.content)) as archive:
         assert archive.read("GOne.Client-x64.msi") == b"MSI-test-client"
         manifest = json.loads(archive.read("deployment.json"))
+        client_settings = json.loads(archive.read("clientsettings.json"))
+        assert "Install-GOne.ps1" in archive.namelist()
+        assert "Install-GOne.cmd" in archive.namelist()
     assert manifest["target_subject"] == "alice"
     assert manifest["vpn"]["allowed_ips"] == "10.70.0.0/24, 192.168.40.10/32"
     assert manifest["file_servers"] == [
         {"name": "Documents", "host": "files.internal", "shares": ["Home", "Team"]}
     ]
     assert len(manifest["enrollment_code"]) >= 32
+    assert client_settings == {
+        "serverUrl": "http://testserver",
+        "workspace": "acme",
+        "enrollmentCode": manifest["enrollment_code"],
+    }
+
+    bootstrap = client.post(
+        "/api/v1/client/bootstrap",
+        json={"device_name": "ALICE-PC", "enrollment_code": manifest["enrollment_code"]},
+        headers=alice,
+    )
+    assert bootstrap.status_code == 200
+    assert "AllowedIPs = 10.70.0.0/24, 192.168.40.10/32" in bootstrap.json()["vpn_profile"]
+    assert bootstrap.json()["file_shares"] == [
+        {"name": "Documents - Home", "unc_path": r"\\files.internal\Home"},
+        {"name": "Documents - Team", "unc_path": r"\\files.internal\Team"},
+    ]
+    assert client.post(
+        "/api/v1/client/bootstrap",
+        json={"device_name": "ALICE-PC", "enrollment_code": manifest["enrollment_code"]},
+        headers=alice,
+    ).status_code == 200
     events = client.get("/api/v1/audit-events", headers=admin).json()
     assert "client_deployment.downloaded" in [event["action"] for event in events]
 
