@@ -237,6 +237,11 @@ def test_admin_assigns_web_client_download_to_user(client, auth):
         "enrollmentCode": manifest["enrollment_code"],
     }
 
+    # A client profile can only be rendered when the server has its WireGuard
+    # private key, just as it would in a configured production deployment.
+    client.app.state.settings.wireguard_private_key = (
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+    )
     bootstrap = client.post(
         "/api/v1/client/bootstrap",
         json={"device_name": "ALICE-PC", "enrollment_code": manifest["enrollment_code"]},
