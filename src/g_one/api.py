@@ -7,17 +7,16 @@ import json
 from pathlib import Path
 import secrets
 import subprocess
-from typing import Annotated
 import zipfile
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from .auth import CurrentPrincipal, Principal, encode_token
 from .db import DatabaseSession
-from .models import ApiToken, AuditEvent, ClientDeploymentProfile, ClientEnrollmentCode, Device, FileServer, InstallationState, SupportRequest, VpnNetwork, VpnPeer, Workspace, WorkspaceUser
+from .models import ApiToken, AuditEvent, ClientDeploymentProfile, ClientEnrollmentCode, Device, FileServer, InstallationState, SupportRequest, VpnNetwork, VpnPeer, WorkspaceUser
 from .passwords import hash_password, verify_password
 from .schemas import (
     AdministratorSetup,
@@ -52,8 +51,6 @@ from .schemas import (
     UserRead,
     UserUpdate,
     UserSessionCreate,
-    WorkspaceRead,
-    WorkspaceUpdate,
 )
 from .wireguard import (
     address_belongs,
@@ -69,7 +66,7 @@ from .wireguard import (
 router = APIRouter()
 
 ROLES = {
-    "tenant_admin": ("워크스페이스 관리자", ["workspace.manage", "tokens.manage", "users.manage", "roles.manage", "devices.manage", "vpn.manage", "support.manage", "audit.read"]),
+    "tenant_admin": ("조직 관리자", ["tokens.manage", "users.manage", "roles.manage", "devices.manage", "vpn.manage", "support.manage", "audit.read"]),
     "support": ("지원 담당자", ["devices.read", "vpn.read", "support.manage"]),
     "auditor": ("감사 담당자", ["audit.read"]),
     "member": ("일반 사용자", ["devices.self", "support.consent"]),
@@ -152,24 +149,12 @@ def create_user_session(
         session.rollback()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid account credentials")
     principal = Principal(user.subject, user.tenant_id, frozenset(user.roles))
-    workspace = session.get(Workspace, user.tenant_id)
-    if workspace is None and "tenant_admin" not in user.roles:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "workspace has not been created")
     audit(session, principal, "session.login", "user", user.id)
     session.commit()
     return SessionToken(access_token=encode_token(principal, request.app.state.settings))
 
 
-def require_provisioned_workspace(
-    principal: CurrentPrincipal, session: DatabaseSession
-) -> Principal:
-    workspace = session.get(Workspace, principal.tenant_id)
-    if workspace is None or workspace.status != "active":
-        raise HTTPException(status.HTTP_409_CONFLICT, "active workspace required")
-    return principal
-
-
-ProvisionedPrincipal = Annotated[Principal, Depends(require_provisioned_workspace)]
+ProvisionedPrincipal = CurrentPrincipal
 
 
 @router.get("/api/v1/me", response_model=PrincipalRead)
@@ -288,6 +273,53 @@ def create_file_server(
     return server
 
 
+@router.put("/api/v1/file-servers/{server_id}", response_model=FileServerRead)
+def update_file_server(
+    server_id: str, body: FileServerCreate, principal: ProvisionedPrincipal, session: DatabaseSession
+):
+    principal.require_role("tenant_admin")
+    server = session.scalar(select(FileServer).where(
+        FileServer.id == server_id,
+        FileServer.tenant_id == principal.tenant_id,
+        FileServer.enabled.is_(True),
+    ))
+    if server is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "file server not found")
+    host = body.host.strip().lower()
+    if any(character in host for character in ("/", "\\", ":")):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "host must be a DNS name or IP address")
+    server.name = body.name.strip()
+    server.host = host
+    server.shares = normalized_values(body.shares, "shares")
+    server.updated_at = now()
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "file server name already exists") from exc
+    audit(session, principal, "file_server.updated", "file_server", server.id)
+    session.commit()
+    return server
+
+
+@router.delete("/api/v1/file-servers/{server_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_file_server(
+    server_id: str, principal: ProvisionedPrincipal, session: DatabaseSession
+) -> None:
+    principal.require_role("tenant_admin")
+    server = session.scalar(select(FileServer).where(
+        FileServer.id == server_id,
+        FileServer.tenant_id == principal.tenant_id,
+        FileServer.enabled.is_(True),
+    ))
+    if server is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "file server not found")
+    server.enabled = False
+    server.updated_at = now()
+    audit(session, principal, "file_server.disabled", "file_server", server.id)
+    session.commit()
+
+
 @router.get("/api/v1/client-deployments", response_model=list[DeploymentProfileRead])
 def list_client_deployments(principal: ProvisionedPrincipal, session: DatabaseSession):
     profiles = session.scalars(
@@ -322,6 +354,8 @@ def create_client_deployment(
         allowed_ips=allowed_ips,
         file_server_ids=file_server_ids,
         target_subjects=subjects,
+        deliver_vpn_on_login=body.deliver_vpn_on_login,
+        deliver_file_servers_on_login=body.deliver_file_servers_on_login,
     )
     session.add(profile)
     try:
@@ -364,6 +398,8 @@ def update_client_deployment(
     profile.allowed_ips = allowed_ips
     profile.file_server_ids = file_server_ids
     profile.target_subjects = subjects
+    profile.deliver_vpn_on_login = body.deliver_vpn_on_login
+    profile.deliver_file_servers_on_login = body.deliver_file_servers_on_login
     profile.revision += 1
     profile.updated_at = now()
     try:
@@ -506,30 +542,6 @@ Write-Host 'G-One installation and deployment settings are complete.'
     )
 
 
-@router.get("/api/v1/workspace", response_model=WorkspaceRead)
-def read_workspace(principal: CurrentPrincipal, session: DatabaseSession):
-    principal.require_role("tenant_admin")
-    workspace = session.get(Workspace, principal.tenant_id)
-    if workspace is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "workspace has not been created")
-    return workspace
-
-
-@router.put("/api/v1/workspace", response_model=WorkspaceRead)
-def update_workspace(body: WorkspaceUpdate, principal: CurrentPrincipal, session: DatabaseSession):
-    principal.require_role("tenant_admin")
-    workspace = session.get(Workspace, principal.tenant_id)
-    if workspace is None:
-        workspace = Workspace(id=principal.tenant_id, name=body.name.strip())
-        session.add(workspace)
-    else:
-        workspace.name = body.name.strip()
-        workspace.updated_at = now()
-    audit(session, principal, "workspace.updated", "workspace", principal.tenant_id)
-    session.commit()
-    return workspace
-
-
 @router.get("/api/v1/roles", response_model=list[RoleRead])
 def list_roles(principal: ProvisionedPrincipal):
     principal.require_role("tenant_admin")
@@ -545,8 +557,6 @@ def list_users(principal: ProvisionedPrincipal, session: DatabaseSession):
 @router.post("/api/v1/users", response_model=UserRead, status_code=status.HTTP_201_CREATED)
 def create_user(body: UserCreate, principal: ProvisionedPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin")
-    if session.get(Workspace, principal.tenant_id) is None:
-        raise HTTPException(status.HTTP_409_CONFLICT, "create the workspace before adding users")
     network = session.scalar(select(VpnNetwork).where(VpnNetwork.tenant_id == principal.tenant_id))
     try:
         vpn_address = address_belongs(network.address_cidr, body.vpn_address) if network and body.vpn_address else None
@@ -563,6 +573,39 @@ def create_user(body: UserCreate, principal: ProvisionedPrincipal, session: Data
     audit(session, principal, "user.created", "user", user.id, roles=user.roles)
     session.commit()
     return user
+
+
+@router.delete("/api/v1/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(user_id: str, principal: ProvisionedPrincipal, session: DatabaseSession) -> None:
+    principal.require_role("tenant_admin")
+    user = session.scalar(select(WorkspaceUser).where(
+        WorkspaceUser.id == user_id, WorkspaceUser.tenant_id == principal.tenant_id
+    ))
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
+    if user.subject == principal.subject:
+        raise HTTPException(status.HTTP_409_CONFLICT, "cannot delete the signed-in account")
+    if "tenant_admin" in user.roles:
+        other_admins = session.scalars(select(WorkspaceUser).where(
+            WorkspaceUser.tenant_id == principal.tenant_id,
+            WorkspaceUser.id != user.id,
+            WorkspaceUser.status == "active",
+        )).all()
+        if not any("tenant_admin" in candidate.roles for candidate in other_admins):
+            raise HTTPException(status.HTTP_409_CONFLICT, "cannot delete the last administrator")
+    profiles = session.scalars(select(ClientDeploymentProfile).where(
+        ClientDeploymentProfile.tenant_id == principal.tenant_id,
+        ClientDeploymentProfile.enabled.is_(True),
+    )).all()
+    for profile in profiles:
+        if user.subject in profile.target_subjects:
+            profile.target_subjects = [subject for subject in profile.target_subjects if subject != user.subject]
+            profile.enabled = bool(profile.target_subjects)
+            profile.revision += 1
+            profile.updated_at = now()
+    audit(session, principal, "user.deleted", "user", user.id, subject=user.subject)
+    session.delete(user)
+    session.commit()
 
 
 @router.put("/api/v1/users/{user_id}", response_model=UserRead)
@@ -614,6 +657,7 @@ def bootstrap_client(
         session.add(device)
 
     profile = None
+    login_delivery = not body.enrollment_code
     if body.enrollment_code:
         token_hash = hashlib.sha256(body.enrollment_code.encode()).hexdigest()
         enrollment = session.scalar(select(ClientEnrollmentCode).where(
@@ -660,7 +704,8 @@ def bootstrap_client(
     network = session.scalar(select(VpnNetwork).where(VpnNetwork.tenant_id == principal.tenant_id))
     settings = request.app.state.settings
     vpn_profile = None
-    if network and user.vpn_address and settings.wireguard_private_key:
+    include_vpn = profile is None or not login_delivery or profile.deliver_vpn_on_login
+    if network and user.vpn_address and settings.wireguard_private_key and include_vpn:
         address = address_belongs(network.address_cidr, user.vpn_address)
         routes = normalize_allowed_ips(
             profile.allowed_ips if profile else
@@ -691,7 +736,7 @@ def bootstrap_client(
     audit(session, principal, "client.bootstrapped", "device", device.id, vpn=bool(vpn_profile))
     session.commit()
     file_shares = []
-    if profile:
+    if profile and (not login_delivery or profile.deliver_file_servers_on_login):
         servers = session.scalars(select(FileServer).where(
             FileServer.tenant_id == principal.tenant_id,
             FileServer.id.in_(profile.file_server_ids),

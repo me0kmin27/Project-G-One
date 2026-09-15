@@ -61,15 +61,6 @@ class AuditEvent(Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
-class Workspace(Base):
-    __tablename__ = "workspaces"
-    id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    name: Mapped[str] = mapped_column(String(128))
-    status: Mapped[str] = mapped_column(String(20), default="active")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-
-
 class InstallationState(Base):
     __tablename__ = "installation_state"
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -167,6 +158,8 @@ class ClientDeploymentProfile(Base):
     allowed_ips: Mapped[str] = mapped_column(String(1024))
     file_server_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
     target_subjects: Mapped[list[str]] = mapped_column(JSON, default=list)
+    deliver_vpn_on_login: Mapped[bool] = mapped_column(Boolean, default=True)
+    deliver_file_servers_on_login: Mapped[bool] = mapped_column(Boolean, default=True)
     revision: Mapped[int] = mapped_column(Integer, default=1)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

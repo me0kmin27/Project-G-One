@@ -60,18 +60,6 @@ class SetupStatus(ApiModel):
     administrator_required: bool
 
 
-class WorkspaceUpdate(ApiModel):
-    name: str = Field(min_length=1, max_length=128)
-
-
-class WorkspaceRead(ApiModel):
-    id: str
-    name: str
-    status: str
-    created_at: datetime
-    updated_at: datetime
-
-
 class UserCreate(ApiModel):
     subject: str = Field(min_length=1, max_length=128)
     display_name: str = Field(min_length=1, max_length=128)
@@ -300,6 +288,8 @@ class DeploymentProfileCreate(ApiModel):
     allowed_ips: str = Field(min_length=1, max_length=1024)
     file_server_ids: list[str] = Field(min_length=1, max_length=100)
     target_subjects: list[str] = Field(min_length=1, max_length=1000)
+    deliver_vpn_on_login: bool = True
+    deliver_file_servers_on_login: bool = True
 
 
 class DeploymentProfileRead(ApiModel):
@@ -309,6 +299,8 @@ class DeploymentProfileRead(ApiModel):
     allowed_ips: str
     file_server_ids: list[str]
     target_subjects: list[str]
+    deliver_vpn_on_login: bool
+    deliver_file_servers_on_login: bool
     revision: int
     enabled: bool
     created_at: datetime
