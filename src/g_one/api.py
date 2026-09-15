@@ -213,6 +213,46 @@ def normalized_values(values: list[str], label: str) -> list[str]:
     return normalized
 
 
+def validate_deployment_profile(
+    body: DeploymentProfileCreate, tenant_id: str, session
+) -> tuple[VpnNetwork, list[str], list[str], str]:
+    """Validate and normalize all references used by a deployment profile."""
+    network = session.scalar(
+        select(VpnNetwork).where(
+            VpnNetwork.id == body.vpn_network_id,
+            VpnNetwork.tenant_id == tenant_id,
+            VpnNetwork.enabled.is_(True),
+        )
+    )
+    if network is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "VPN network not found")
+    file_server_ids = normalized_values(body.file_server_ids, "file servers")
+    servers = session.scalars(
+        select(FileServer).where(
+            FileServer.tenant_id == tenant_id,
+            FileServer.id.in_(file_server_ids),
+            FileServer.enabled.is_(True),
+        )
+    ).all()
+    if len(servers) != len(file_server_ids):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "file server not found")
+    subjects = normalized_values(body.target_subjects, "target subjects")
+    users = session.scalars(
+        select(WorkspaceUser).where(
+            WorkspaceUser.tenant_id == tenant_id,
+            WorkspaceUser.subject.in_(subjects),
+            WorkspaceUser.status == "active",
+        )
+    ).all()
+    if len(users) != len(subjects):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "active target user not found")
+    try:
+        allowed_ips = normalize_allowed_ips(body.allowed_ips)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+    return network, file_server_ids, subjects, allowed_ips
+
+
 @router.get("/api/v1/file-servers", response_model=list[FileServerRead])
 def list_file_servers(principal: ProvisionedPrincipal, session: DatabaseSession):
     principal.require_role("tenant_admin")
@@ -272,39 +312,9 @@ def create_client_deployment(
     body: DeploymentProfileCreate, principal: ProvisionedPrincipal, session: DatabaseSession
 ):
     principal.require_role("tenant_admin")
-    network = session.scalar(
-        select(VpnNetwork).where(
-            VpnNetwork.id == body.vpn_network_id,
-            VpnNetwork.tenant_id == principal.tenant_id,
-            VpnNetwork.enabled.is_(True),
-        )
+    network, file_server_ids, subjects, allowed_ips = validate_deployment_profile(
+        body, principal.tenant_id, session
     )
-    if network is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "VPN network not found")
-    file_server_ids = normalized_values(body.file_server_ids, "file servers")
-    servers = session.scalars(
-        select(FileServer).where(
-            FileServer.tenant_id == principal.tenant_id,
-            FileServer.id.in_(file_server_ids),
-            FileServer.enabled.is_(True),
-        )
-    ).all()
-    if len(servers) != len(file_server_ids):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "file server not found")
-    subjects = normalized_values(body.target_subjects, "target subjects")
-    users = session.scalars(
-        select(WorkspaceUser).where(
-            WorkspaceUser.tenant_id == principal.tenant_id,
-            WorkspaceUser.subject.in_(subjects),
-            WorkspaceUser.status == "active",
-        )
-    ).all()
-    if len(users) != len(subjects):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "active target user not found")
-    try:
-        allowed_ips = normalize_allowed_ips(body.allowed_ips)
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
     profile = ClientDeploymentProfile(
         tenant_id=principal.tenant_id,
         name=body.name.strip(),
@@ -329,6 +339,61 @@ def create_client_deployment(
     )
     session.commit()
     return profile
+
+
+@router.put("/api/v1/client-deployments/{profile_id}", response_model=DeploymentProfileRead)
+def update_client_deployment(
+    profile_id: str,
+    body: DeploymentProfileCreate,
+    principal: ProvisionedPrincipal,
+    session: DatabaseSession,
+):
+    principal.require_role("tenant_admin")
+    profile = session.scalar(select(ClientDeploymentProfile).where(
+        ClientDeploymentProfile.id == profile_id,
+        ClientDeploymentProfile.tenant_id == principal.tenant_id,
+        ClientDeploymentProfile.enabled.is_(True),
+    ))
+    if profile is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "deployment profile not found")
+    network, file_server_ids, subjects, allowed_ips = validate_deployment_profile(
+        body, principal.tenant_id, session
+    )
+    profile.name = body.name.strip()
+    profile.vpn_network_id = network.id
+    profile.allowed_ips = allowed_ips
+    profile.file_server_ids = file_server_ids
+    profile.target_subjects = subjects
+    profile.revision += 1
+    profile.updated_at = now()
+    try:
+        session.flush()
+    except IntegrityError as exc:
+        session.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "deployment profile name already exists") from exc
+    audit(session, principal, "client_deployment.updated", "client_deployment", profile.id,
+          revision=profile.revision, target_subjects=subjects)
+    session.commit()
+    return profile
+
+
+@router.delete("/api/v1/client-deployments/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_client_deployment(
+    profile_id: str, principal: ProvisionedPrincipal, session: DatabaseSession
+):
+    principal.require_role("tenant_admin")
+    profile = session.scalar(select(ClientDeploymentProfile).where(
+        ClientDeploymentProfile.id == profile_id,
+        ClientDeploymentProfile.tenant_id == principal.tenant_id,
+        ClientDeploymentProfile.enabled.is_(True),
+    ))
+    if profile is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "deployment profile not found")
+    profile.enabled = False
+    profile.revision += 1
+    profile.updated_at = now()
+    audit(session, principal, "client_deployment.disabled", "client_deployment", profile.id)
+    session.commit()
 
 
 @router.get("/api/v1/client-deployments/{profile_id}/download")
@@ -573,6 +638,24 @@ def bootstrap_client(
         ))
         if profile is None or principal.subject not in profile.target_subjects:
             raise HTTPException(status.HTTP_409_CONFLICT, "client deployment is no longer available")
+    else:
+        # A managed client does not need a download-time enrollment code forever.
+        # On every authenticated login, select the most recently managed profile
+        # assigned to this user and return its current VPN policy.
+        assigned_profiles = session.scalars(
+            select(ClientDeploymentProfile).where(
+                ClientDeploymentProfile.tenant_id == principal.tenant_id,
+                ClientDeploymentProfile.enabled.is_(True),
+            ).order_by(
+                ClientDeploymentProfile.updated_at.desc(),
+                ClientDeploymentProfile.name,
+            )
+        ).all()
+        profile = next(
+            (candidate for candidate in assigned_profiles
+             if principal.subject in candidate.target_subjects),
+            None,
+        )
 
     network = session.scalar(select(VpnNetwork).where(VpnNetwork.tenant_id == principal.tenant_id))
     settings = request.app.state.settings

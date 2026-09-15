@@ -204,6 +204,21 @@ def test_admin_assigns_web_client_download_to_user(client, auth):
     )
     assert profile.status_code == 201
 
+    updated = client.put(
+        f"/api/v1/client-deployments/{profile.json()['id']}",
+        json={
+            "name": "Alice managed access",
+            "vpn_network_id": vpn["id"],
+            "allowed_ips": "10.70.0.0/24, 192.168.50.10/32",
+            "file_server_ids": [server.json()["id"]],
+            "target_subjects": ["alice"],
+        },
+        headers=admin,
+    )
+    assert updated.status_code == 200
+    assert updated.json()["revision"] == 2
+    assert updated.json()["name"] == "Alice managed access"
+
     alice = auth("alice", "acme", ["member"])
     assert client.get("/api/v1/file-servers", headers=alice).status_code == 403
     assigned = client.get("/api/v1/client-deployments", headers=alice).json()
@@ -226,7 +241,7 @@ def test_admin_assigns_web_client_download_to_user(client, auth):
         assert "Install-GOne.ps1" in archive.namelist()
         assert "Install-GOne.cmd" in archive.namelist()
     assert manifest["target_subject"] == "alice"
-    assert manifest["vpn"]["allowed_ips"] == "10.70.0.0/24, 192.168.40.10/32"
+    assert manifest["vpn"]["allowed_ips"] == "10.70.0.0/24, 192.168.50.10/32"
     assert manifest["file_servers"] == [
         {"name": "Documents", "host": "files.internal", "shares": ["Home", "Team"]}
     ]
@@ -248,7 +263,7 @@ def test_admin_assigns_web_client_download_to_user(client, auth):
         headers=alice,
     )
     assert bootstrap.status_code == 200
-    assert "AllowedIPs = 10.70.0.0/24, 192.168.40.10/32" in bootstrap.json()["vpn_profile"]
+    assert "AllowedIPs = 10.70.0.0/24, 192.168.50.10/32" in bootstrap.json()["vpn_profile"]
     assert bootstrap.json()["file_shares"] == [
         {"name": "Documents - Home", "unc_path": r"\\files.internal\Home"},
         {"name": "Documents - Team", "unc_path": r"\\files.internal\Team"},
@@ -260,6 +275,28 @@ def test_admin_assigns_web_client_download_to_user(client, auth):
     ).status_code == 200
     events = client.get("/api/v1/audit-events", headers=admin).json()
     assert "client_deployment.downloaded" in [event["action"] for event in events]
+
+    # Login bootstrap resolves the server-side assignment even without the
+    # original, short-lived download enrollment code.
+    automatic = client.post(
+        "/api/v1/client/bootstrap", json={"device_name": "ALICE-PC"}, headers=alice
+    )
+    assert automatic.status_code == 200
+    assert "AllowedIPs = 10.70.0.0/24, 192.168.50.10/32" in automatic.json()["vpn_profile"]
+    assert automatic.json()["file_shares"] == bootstrap.json()["file_shares"]
+
+    assert client.delete(
+        f"/api/v1/client-deployments/{profile.json()['id']}", headers=alice
+    ).status_code == 403
+    assert client.delete(
+        f"/api/v1/client-deployments/{profile.json()['id']}", headers=admin
+    ).status_code == 204
+    assert client.get("/api/v1/client-deployments", headers=alice).json() == []
+    fallback = client.post(
+        "/api/v1/client/bootstrap", json={"device_name": "ALICE-PC"}, headers=alice
+    )
+    assert fallback.status_code == 200
+    assert "192.168.50.10/32" not in fallback.json()["vpn_profile"]
 
 
 def test_management_is_admin_only_and_tenant_scoped(client, auth):
