@@ -15,6 +15,7 @@ async function api(path,options={}){
 function escapeHtml(value){return String(value).replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));}
 function date(value){return new Intl.DateTimeFormat('ko-KR',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value));}
 function statusLabel(value){return {registered:'등록됨',revoked:'회수됨',pending:'대기 중',accepted:'진행 중',denied:'거절됨',ended:'종료됨',expired:'만료됨'}[value]||value;}
+function permissionLabel(value){return {screen_view:'화면 보기',input_control:'입력 제어',clipboard:'클립보드',file_transfer:'파일 전송'}[value]||value;}
 function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),2800);}
 function showError(error){const el=$('#globalError');el.textContent=error.message;el.classList.remove('hidden');}
 function setBusy(button,busy,label='처리 중…'){if(busy){button.dataset.label=button.innerHTML;button.textContent=label;button.disabled=true;}else{button.innerHTML=button.dataset.label||button.innerHTML;button.disabled=false;}}
@@ -22,6 +23,12 @@ function empty(message){return `<div class="empty">${escapeHtml(message)}</div>`
 function deviceRows(items){return items.length?items.map(d=>`<div class="list-row"><span class="item-icon">▣</span><div><strong>${escapeHtml(d.name)}</strong><small>${escapeHtml(d.owner_id)} · ${date(d.created_at)}</small></div><span class="status ${d.status}">${statusLabel(d.status)}</span></div>`).join(''):empty('등록된 장치가 없습니다.');}
 function supportRows(items){return items.length?items.map(r=>`<div class="list-row"><span class="item-icon">◎</span><div><strong>${escapeHtml(r.purpose)}</strong><small>${escapeHtml(deviceName(r.target_device_id))} · ${date(r.created_at)}</small></div><span class="status ${r.state}">${statusLabel(r.state)}</span></div>`).join(''):empty('지원 요청이 없습니다.');}
 function deviceName(id){return state.devices.find(d=>d.id===id)?.name||id.slice(0,8);}
+function isDeviceOwner(request){return state.devices.some(device=>device.id===request.target_device_id&&device.owner_id===state.me.subject);}
+function supportActions(request){
+  if(request.state==='pending'&&isDeviceOwner(request))return `<div class="row-actions"><button class="btn primary compact" data-support-decision="accept" data-support-id="${request.id}">수락</button><button class="danger-btn" data-support-decision="deny" data-support-id="${request.id}">거절</button></div>`;
+  if(request.state==='accepted'&&(isDeviceOwner(request)||request.requester_id===state.me.subject))return `<button class="danger-btn" data-support-end="${request.id}">세션 종료</button>`;
+  return '—';
+}
 async function loadData(){
   $('#globalError').classList.add('hidden');
   try{
@@ -38,7 +45,7 @@ function render(){
   $('#recentDevices').innerHTML=deviceRows(state.devices.slice(0,4));$('#recentSupport').innerHTML=supportRows(state.support.slice(0,4));
   $('#supportDevice').innerHTML=active.map(d=>`<option value="${d.id}">${escapeHtml(d.name)} · ${escapeHtml(d.owner_id)}</option>`).join('');
   renderDeviceTable();
-  $('#supportTable').innerHTML=state.support.length?`<table class="data-table"><thead><tr><th>목적</th><th>장치</th><th>요청자</th><th>권한</th><th>상태</th><th>요청일</th></tr></thead><tbody>${state.support.map(r=>`<tr><td><strong>${escapeHtml(r.purpose)}</strong></td><td>${escapeHtml(deviceName(r.target_device_id))}</td><td>${escapeHtml(r.requester_id)}</td><td>${r.permissions.map(escapeHtml).join(', ')}</td><td><span class="status ${r.state}">${statusLabel(r.state)}</span></td><td>${date(r.created_at)}</td></tr>`).join('')}</tbody></table>`:empty('지원 요청이 없습니다.');
+  $('#supportTable').innerHTML=state.support.length?`<table class="data-table"><thead><tr><th>목적</th><th>장치</th><th>요청자</th><th>권한</th><th>상태</th><th>만료/요청 시각</th><th>작업</th></tr></thead><tbody>${state.support.map(r=>`<tr><td><strong>${escapeHtml(r.purpose)}</strong></td><td>${escapeHtml(deviceName(r.target_device_id))}</td><td>${escapeHtml(r.requester_id)}</td><td>${r.permissions.map(permissionLabel).map(escapeHtml).join(', ')}</td><td><span class="status ${r.state}">${statusLabel(r.state)}</span></td><td><small>${r.state==='pending'?`만료 ${date(r.expires_at)}`:`요청 ${date(r.created_at)}`}</small></td><td>${supportActions(r)}</td></tr>`).join('')}</tbody></table>`:empty('지원 요청이 없습니다.');
 }
 function renderDeviceTable(){
   const query=$('#deviceSearch').value.trim().toLocaleLowerCase();
@@ -85,6 +92,7 @@ async function downloadDeployment(profileId,subject){
 async function connect(){
   try{
     state.me=await api('/api/v1/me');sessionStorage.setItem('g-one-token',state.token);
+    $$('[data-requires-role]').forEach(element=>{const roles=element.dataset.requiresRole.split(',');element.classList.toggle('hidden',roles.every(role=>!state.me.roles.includes(role)));});
 $('#accountName').textContent=state.me.subject;$('#greetingName').textContent=state.me.subject;$('#avatar').textContent=state.me.subject[0].toUpperCase();$('#accountRole').textContent=state.me.roles.join(' · ');
     $('#loginView').classList.add('hidden');$('#appView').classList.remove('hidden');
     await loadData();
@@ -99,11 +107,13 @@ $('#logout').onclick=()=>{sessionStorage.removeItem('g-one-token');location.relo
 $('#addDevice').onclick=()=>$('#deviceDialog').showModal();$$('[data-action="open-support"]').forEach(el=>el.onclick=()=>{if(!state.devices.some(d=>d.status==='registered'))return toast('먼저 활성 장치를 등록하세요.');$('#supportDialog').showModal();});$$('[data-close]').forEach(el=>el.onclick=()=>el.closest('dialog').close());
 $('#deviceForm').addEventListener('submit',async e=>{e.preventDefault();try{await api('/api/v1/devices',{method:'POST',body:JSON.stringify({name:$('#deviceName').value})});e.target.reset();$('#deviceDialog').close();toast('장치를 등록했습니다.');await loadData();}catch(error){showError(error);}});
 $('#supportForm').addEventListener('submit',async e=>{e.preventDefault();const permissions=$$('input[name="permission"]:checked').map(el=>el.value);if(!permissions.length)return toast('권한을 하나 이상 선택하세요.');try{await api('/api/v1/support-requests',{method:'POST',body:JSON.stringify({target_device_id:$('#supportDevice').value,purpose:$('#supportPurpose').value,permissions})});e.target.reset();$('#supportDialog').close();toast('지원 요청을 보냈습니다.');await loadData();}catch(error){showError(error);}});
+$('#supportTable').addEventListener('click',async event=>{const button=event.target.closest('[data-support-decision],[data-support-end]');if(!button)return;try{setBusy(button,true);if(button.dataset.supportDecision){const accept=button.dataset.supportDecision==='accept';await api(`/api/v1/support-requests/${button.dataset.supportId}/decision`,{method:'POST',body:JSON.stringify({accept})});toast(accept?'지원 요청을 수락했습니다.':'지원 요청을 거절했습니다.');}else{if(!confirm('진행 중인 지원 세션을 종료할까요?'))return;await api(`/api/v1/support-requests/${button.dataset.supportEnd}/end`,{method:'POST'});toast('지원 세션을 종료했습니다.');}await loadData();}catch(error){showError(error);}finally{setBusy(button,false);}});
 $('#devicesTable').addEventListener('click',async e=>{const id=e.target.dataset.revoke;if(!id||!confirm('이 장치의 접근을 회수할까요?'))return;try{await api(`/api/v1/devices/${id}`,{method:'DELETE'});toast('장치 접근을 회수했습니다.');await loadData();}catch(error){showError(error);}});$('#refreshAudit').onclick=loadAudit;
 $('#deviceSearch').addEventListener('input',renderDeviceTable);
 function openUserDialog(user=null){$('#userForm').reset();$('#userId').value=user?.id||'';$('#userDialogTitle').textContent=user?'사용자 및 접속 정책 편집':'사용자 및 접속 정책 등록';$('#userSubmit').textContent=user?'변경 저장':'등록';$('#userSubject').disabled=Boolean(user);$('#userSubject').value=user?.subject||'';$('#userName').value=user?.display_name||'';$('#userEmail').value=user?.email||'';$('#userVpnAddress').value=user?.vpn_address||'';$('#userAllowedIps').value=user?.allowed_ips||'';$('#userPassword').required=!user;$('#userPasswordGuide').textContent=user?'(변경할 때만 입력)':'(필수)';$('#userStatusField').classList.toggle('hidden',!user);$('#userStatus').value=user?.status||'active';$$('input[name="userRole"]').forEach(input=>input.checked=user?user.roles.includes(input.value):input.value==='member');$('#userDialog').showModal();}
 $('#addUser').onclick=()=>openUserDialog();
 $('#addToken').onclick=()=>$('#tokenDialog').showModal();
+$('#copyToken').onclick=async()=>{await navigator.clipboard.writeText($('#issuedToken').value);toast('토큰을 복사했습니다.');};
 function openFileServerDialog(server=null){$('#fileServerForm').reset();$('#fileServerId').value=server?.id||'';$('#fileServerDialogTitle').textContent=server?'파일 서버 편집':'파일 서버 등록';$('#fileServerSubmit').textContent=server?'변경 저장':'서버 등록';$('#fileServerName').value=server?.name||'';$('#fileServerHost').value=server?.host||'';$('#fileServerShares').value=server?.shares.join('\n')||'';$('#fileServerDialog').showModal();}
 $('#addFileServer').onclick=()=>openFileServerDialog();
 function openDeploymentDialog(profile=null){if(!state.vpn)return toast('먼저 VPN 서버를 설정하세요.');$('#deploymentForm').reset();$('#deploymentId').value=profile?.id||'';$('#deploymentDialogTitle').textContent=profile?'배포 프로필 편집':'Windows 배포 프로필';$('#deploymentSubmit').textContent=profile?'변경 저장':'프로필 게시';$('#deploymentVpn').innerHTML=`<option value="${state.vpn.id}">${escapeHtml(state.vpn.name)}</option>`;$('#deploymentName').value=profile?.name||'';$('#deploymentRoutes').value=profile?.allowed_ips||state.vpn.network_route;$('#deploymentDeliverVpn').checked=profile?.deliver_vpn_on_login??true;$('#deploymentDeliverFiles').checked=profile?.deliver_file_servers_on_login??true;$('#deploymentServers').className='choice-list';$('#deploymentServers').innerHTML=state.fileServers.map(server=>`<label><input type="checkbox" name="deploymentServer" value="${server.id}" ${profile?.file_server_ids.includes(server.id)?'checked':''}> ${escapeHtml(server.name)} · \\${escapeHtml(server.host)}</label>`).join('');$('#deploymentUsers').className='choice-list';$('#deploymentUsers').innerHTML=state.users.filter(user=>user.status==='active').map(user=>`<label><input type="checkbox" name="deploymentUser" value="${escapeHtml(user.subject)}" ${profile?.target_subjects.includes(user.subject)?'checked':''}> ${escapeHtml(user.display_name)} · ${escapeHtml(user.subject)}</label>`).join('');$('#deploymentDialog').showModal();}

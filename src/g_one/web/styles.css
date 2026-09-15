@@ -11,3 +11,4 @@
 @media(max-width:900px){.distribution-grid{grid-template-columns:1fr}}
 
 .profile-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.row-actions{display:flex;align-items:center;gap:6px}.btn.compact{padding:7px 10px;font-size:9px}.data-table td small{color:var(--muted)}
