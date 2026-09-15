@@ -107,6 +107,8 @@ ZIP으로 제공됩니다. 배포 파일에는 VPN 개인 키나 SMB 암호를 �
 `.deploy/windows-client/GOne.Client-x64.msi`에 게시한 뒤 서버를 재시작합니다. 이 전용 배포
 디렉터리는 컨테이너가 만든 `windows/dist`의 소유권과 관계없이 배포 사용자가 관리합니다.
 수동 배포에서는 서버를 시작하기 전에 같은 경로에 Windows 패키지를 게시해야 합니다.
+다운로드한 ZIP은 압축을 푼 뒤 `Install-GOne.cmd`로 설치해야 합니다. 런처가 공통 MSI를
+설치하고 해당 사용자에게 발급된 서버·워크스페이스·배포 프로필 설정을 함께 적용합니다.
 
 ### Docker Compose + MariaDB 배포
 

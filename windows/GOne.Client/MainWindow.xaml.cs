@@ -13,8 +13,13 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        settings = JsonSerializer.Deserialize<ClientSettings>(
-            File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "clientsettings.json")))
+        var managedSettings = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "G-One", "clientsettings.json");
+        var settingsPath = File.Exists(managedSettings)
+            ? managedSettings
+            : Path.Combine(AppContext.BaseDirectory, "clientsettings.json");
+        settings = JsonSerializer.Deserialize<ClientSettings>(File.ReadAllText(settingsPath))
             ?? throw new InvalidOperationException("clientsettings.json을 읽을 수 없습니다.");
     }
 
@@ -25,7 +30,7 @@ public partial class MainWindow : Window
         try
         {
             api?.Dispose();
-            api = new GOneApiClient(settings.serverUrl, settings.workspace);
+            api = new GOneApiClient(settings.serverUrl, settings.workspace, settings.enrollmentCode);
 
             // Authentication is deliberately completed before any device configuration request.
             var principal = await api.LoginAsync(SubjectBox.Text, PasswordBox.Password);
@@ -85,5 +90,5 @@ public partial class MainWindow : Window
         base.OnClosed(e);
     }
 
-    private sealed record ClientSettings(string serverUrl, string workspace);
+    private sealed record ClientSettings(string serverUrl, string workspace, string? enrollmentCode = null);
 }

@@ -4,7 +4,7 @@ using System.Net.Http.Json;
 
 namespace GOne.Client;
 
-internal sealed class GOneApiClient(string serverUrl, string workspace) : IDisposable
+internal sealed class GOneApiClient(string serverUrl, string workspace, string? enrollmentCode) : IDisposable
 {
     private readonly HttpClient http = new() { BaseAddress = new Uri(serverUrl.TrimEnd('/') + "/") };
 
@@ -23,7 +23,11 @@ internal sealed class GOneApiClient(string serverUrl, string workspace) : IDispo
     public async Task<ClientBootstrap> BootstrapAsync()
     {
         var response = await http.PostAsJsonAsync(
-            "api/v1/client/bootstrap", new { device_name = Environment.MachineName });
+            "api/v1/client/bootstrap", new
+            {
+                device_name = Environment.MachineName,
+                enrollment_code = enrollmentCode,
+            });
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<ClientBootstrap>()
             ?? throw new InvalidOperationException("클라이언트 설정 응답이 비어 있습니다.");

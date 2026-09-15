@@ -390,9 +390,34 @@ def download_client_deployment(
         ],
     }
     bundle = io.BytesIO()
+    client_settings = {
+        "serverUrl": manifest["server_url"],
+        "workspace": principal.tenant_id,
+        "enrollmentCode": raw_code,
+    }
+    install_script = """$ErrorActionPreference = 'Stop'
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    $arguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '"'
+    Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList $arguments
+    exit $LASTEXITCODE
+}
+$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$msi = Join-Path $root 'GOne.Client-x64.msi'
+$settings = Join-Path $root 'clientsettings.json'
+$process = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @('/i', ('\"' + $msi + '\"'))
+if ($process.ExitCode -notin @(0, 1641, 3010)) { throw "G-One MSI installation failed (exit code $($process.ExitCode))." }
+$target = Join-Path $env:ProgramData 'G-One'
+New-Item -ItemType Directory -Force -Path $target | Out-Null
+Copy-Item -Force $settings (Join-Path $target 'clientsettings.json')
+Write-Host 'G-One installation and deployment settings are complete.'
+"""
+    install_command = "@echo off\r\npowershell.exe -NoProfile -ExecutionPolicy Bypass -File \"%~dp0Install-GOne.ps1\"\r\npause\r\n"
     with zipfile.ZipFile(bundle, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.write(artifact, "GOne.Client-x64.msi")
         archive.writestr("deployment.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        archive.writestr("clientsettings.json", json.dumps(client_settings, ensure_ascii=False, indent=2))
+        archive.writestr("Install-GOne.ps1", install_script)
+        archive.writestr("Install-GOne.cmd", install_command)
     bundle.seek(0)
     audit(
         session,
@@ -523,13 +548,40 @@ def bootstrap_client(
         device = Device(tenant_id=principal.tenant_id, owner_id=principal.subject, name=body.device_name)
         session.add(device)
 
+    profile = None
+    if body.enrollment_code:
+        token_hash = hashlib.sha256(body.enrollment_code.encode()).hexdigest()
+        enrollment = session.scalar(select(ClientEnrollmentCode).where(
+            ClientEnrollmentCode.token_hash == token_hash,
+            ClientEnrollmentCode.tenant_id == principal.tenant_id,
+            ClientEnrollmentCode.subject == principal.subject,
+        ))
+        if enrollment is None:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "invalid client enrollment code")
+        # The short expiry protects a code until its first authenticated use. Once
+        # activated, the same installed client may use it again after logout or a
+        # reboot; the code is still tenant- and subject-bound.
+        if enrollment.used_at is None:
+            expires_at = enrollment.expires_at.replace(tzinfo=timezone.utc)
+            if expires_at <= now():
+                raise HTTPException(status.HTTP_410_GONE, "client enrollment code expired")
+            enrollment.used_at = now()
+        profile = session.scalar(select(ClientDeploymentProfile).where(
+            ClientDeploymentProfile.id == enrollment.profile_id,
+            ClientDeploymentProfile.tenant_id == principal.tenant_id,
+            ClientDeploymentProfile.enabled.is_(True),
+        ))
+        if profile is None or principal.subject not in profile.target_subjects:
+            raise HTTPException(status.HTTP_409_CONFLICT, "client deployment is no longer available")
+
     network = session.scalar(select(VpnNetwork).where(VpnNetwork.tenant_id == principal.tenant_id))
     settings = request.app.state.settings
     vpn_profile = None
     if network and user.vpn_address and settings.wireguard_private_key:
         address = address_belongs(network.address_cidr, user.vpn_address)
         routes = normalize_allowed_ips(
-            user.allowed_ips or str(ipaddress.ip_interface(network.address_cidr).network)
+            profile.allowed_ips if profile else
+            (user.allowed_ips or str(ipaddress.ip_interface(network.address_cidr).network))
         )
         private_key, peer_public_key = generate_keypair()
         peer = session.scalar(select(VpnPeer).where(
@@ -555,12 +607,23 @@ def bootstrap_client(
     session.flush()
     audit(session, principal, "client.bootstrapped", "device", device.id, vpn=bool(vpn_profile))
     session.commit()
+    file_shares = []
+    if profile:
+        servers = session.scalars(select(FileServer).where(
+            FileServer.tenant_id == principal.tenant_id,
+            FileServer.id.in_(profile.file_server_ids),
+            FileServer.enabled.is_(True),
+        )).all()
+        file_shares = [
+            {"name": f"{server.name} - {share}", "unc_path": f"\\\\{server.host}\\{share}"}
+            for server in servers for share in server.shares
+        ]
     return ClientBootstrap(
         version=user.policy_version,
         user=UserRead.model_validate(user),
         vpn=network_response(network, request) if network else None,
         vpn_profile=vpn_profile,
-        file_shares=[],
+        file_shares=file_shares,
         device=DeviceRead.model_validate(device),
     )
 
