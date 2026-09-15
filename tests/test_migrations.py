@@ -20,7 +20,6 @@ EXPECTED_TABLES = {
     "vpn_networks",
     "vpn_peers",
     "workspace_users",
-    "workspaces",
 }
 
 

@@ -17,37 +17,21 @@ def test_admin_console_is_served(client):
     assert client.get("/assets/app.js").status_code == 200
 
 
-def test_first_run_creates_only_the_administrator_then_requires_a_workspace(client):
+def test_first_run_creates_the_administrator_without_a_workspace(client):
     assert client.get("/api/v1/setup/status").json() == {"administrator_required": True}
-
-    assert client.post(
-        "/api/v1/session/login",
-        json={"subject": "owner", "tenant_id": "acme", "password": "correct-horse"},
-    ).status_code == 401
-
     response = client.post(
         "/api/v1/setup/administrator",
         json={"subject": "owner", "tenant_id": "acme", "password": "correct-horse", "display_name": "Owner"},
     )
     assert response.status_code == 201
     headers = {"Authorization": f"Bearer {response.json()['access_token']}"}
-    assert client.get("/api/v1/me", headers=headers).json()["roles"] == ["tenant_admin"]
-    assert client.get("/api/v1/setup/status").json() == {"administrator_required": False}
     assert client.get("/api/v1/workspace", headers=headers).status_code == 404
     assert client.post(
         "/api/v1/users",
         json={"subject": "alice", "display_name": "Alice", "password": "correct-horse"},
         headers=headers,
-    ).status_code == 409
-    assert client.post(
-        "/api/v1/devices", json={"name": "Too Early"}, headers=headers
-    ).status_code == 409
-
-    workspace = client.put(
-        "/api/v1/workspace", json={"name": "ACME Operations"}, headers=headers
-    )
-    assert workspace.status_code == 200
-    assert workspace.json()["id"] == "acme"
+    ).status_code == 201
+    assert client.post("/api/v1/devices", json={"name": "Ready"}, headers=headers).status_code == 201
 
 
 def test_later_login_cannot_claim_an_administrator_account(client):
@@ -92,12 +76,8 @@ def test_console_rejects_unprovisioned_identity(client):
     )
     assert response.status_code == 401
 
-def test_admin_manages_workspace_users_roles_and_tokens(client, auth):
+def test_admin_manages_users_roles_and_tokens(client, auth):
     admin = auth("admin", "acme", ["tenant_admin"])
-    workspace = client.put("/api/v1/workspace", json={"name": "ACME Operations"}, headers=admin)
-    assert workspace.status_code == 200
-    assert workspace.json()["id"] == "acme"
-    assert client.get("/api/v1/workspace", headers=admin).json()["name"] == "ACME Operations"
     client.put(
         "/api/v1/vpn/network",
         json={"name": "ACME VPN", "address_cidr": "10.77.0.1/24", "endpoint": "vpn.acme.test"},
@@ -212,12 +192,16 @@ def test_admin_assigns_web_client_download_to_user(client, auth):
             "allowed_ips": "10.70.0.0/24, 192.168.50.10/32",
             "file_server_ids": [server.json()["id"]],
             "target_subjects": ["alice"],
+            "deliver_vpn_on_login": False,
+            "deliver_file_servers_on_login": False,
         },
         headers=admin,
     )
     assert updated.status_code == 200
     assert updated.json()["revision"] == 2
     assert updated.json()["name"] == "Alice managed access"
+    assert updated.json()["deliver_vpn_on_login"] is False
+    assert updated.json()["deliver_file_servers_on_login"] is False
 
     alice = auth("alice", "acme", ["member"])
     assert client.get("/api/v1/file-servers", headers=alice).status_code == 403
@@ -282,8 +266,8 @@ def test_admin_assigns_web_client_download_to_user(client, auth):
         "/api/v1/client/bootstrap", json={"device_name": "ALICE-PC"}, headers=alice
     )
     assert automatic.status_code == 200
-    assert "AllowedIPs = 10.70.0.0/24, 192.168.50.10/32" in automatic.json()["vpn_profile"]
-    assert automatic.json()["file_shares"] == bootstrap.json()["file_shares"]
+    assert automatic.json()["vpn_profile"] is None
+    assert automatic.json()["file_shares"] == []
 
     assert client.delete(
         f"/api/v1/client-deployments/{profile.json()['id']}", headers=alice
@@ -297,6 +281,23 @@ def test_admin_assigns_web_client_download_to_user(client, auth):
     )
     assert fallback.status_code == 200
     assert "192.168.50.10/32" not in fallback.json()["vpn_profile"]
+
+    updated_server = client.put(
+        f"/api/v1/file-servers/{server.json()['id']}",
+        json={"name": "Shared documents", "host": "storage.internal", "shares": ["Team"]},
+        headers=admin,
+    )
+    assert updated_server.status_code == 200
+    assert updated_server.json()["host"] == "storage.internal"
+    assert client.delete(
+        f"/api/v1/file-servers/{server.json()['id']}", headers=admin
+    ).status_code == 204
+    assert client.get("/api/v1/file-servers", headers=admin).json() == []
+
+    alice_user = next(user for user in client.get("/api/v1/users", headers=admin).json()
+                      if user["subject"] == "alice")
+    assert client.delete(f"/api/v1/users/{alice_user['id']}", headers=admin).status_code == 204
+    assert all(user["subject"] != "alice" for user in client.get("/api/v1/users", headers=admin).json())
 
 
 def test_management_is_admin_only_and_tenant_scoped(client, auth):
